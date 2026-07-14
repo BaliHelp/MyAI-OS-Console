@@ -1,0 +1,67 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import "tailwindcss";
+
+:root {
+  --bg: #FAFAFA;
+  --surface: #FFFFFF;
+  --surface-lighter: #F9FAFB;
+  --border: rgba(0, 0, 0, 0.08);
+  --accent: #4F46E5;
+  --accent-muted: rgba(79, 70, 229, 0.08);
+  --success: #10B981;
+  --text-primary: #1F2937;
+  --text-secondary: #6B7280;
+}
+
+.dark {
+  --bg: #0A0B0D;
+  --surface: #111214;
+  --surface-lighter: #1A1B1E;
+  --border: rgba(255, 255, 255, 0.08);
+  --accent: #5B8DEF;
+  --accent-muted: rgba(91, 141, 239, 0.08);
+  --success: #2DD4BF;
+  --text-primary: #F5F5F7;
+  --text-secondary: #9CA3AF;
+}
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  
+  --color-bento-bg: var(--bg);
+  --color-bento-surface: var(--surface);
+  --color-bento-surface-lighter: var(--surface-lighter);
+  --color-bento-border: var(--border);
+  --color-bento-accent: var(--accent);
+  --color-bento-accent-muted: var(--accent-muted);
+  --color-bento-success: var(--success);
+  --color-bento-text-primary: var(--text-primary);
+  --color-bento-text-secondary: var(--text-secondary);
+}
+
+@layer base {
+  body {
+    @apply font-sans antialiased transition-colors duration-300 bg-bento-bg text-bento-text-primary;
+  }
+}
+
+/* Custom scrollbar styling to look premium and sleek */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(156, 163, 175, 0.2);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(156, 163, 175, 0.4);
+}
+
