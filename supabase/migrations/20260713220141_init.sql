@@ -1,5 +1,9 @@
+-- ⚠️  DEPRECATED — DO NOT APPLY
+-- This migration used schema 'public' and has been superseded by:
+-- supabase/migrations/20260716_gateway_console.sql
+-- which uses the isolated schema 'gateway_console'
 -- SQL Migration File for Supabase
--- Created for MyAI OS Console Setup
+-- Created for MyAI OS Console Setup (OBSOLETE)
 
 -- 1. Create client_apps table
 create table if not exists public.client_apps (

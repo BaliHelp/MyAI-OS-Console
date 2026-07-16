@@ -1,0 +1,14 @@
+{
+  "version": 2,
+  "regions": ["sin1"],
+  "env": {
+    "NEXT_PUBLIC_SUPABASE_URL": "@supabase-url",
+    "NEXT_PUBLIC_SUPABASE_ANON_KEY": "@supabase-anon-key",
+    "SUPABASE_SERVICE_ROLE_KEY": "@supabase-service-role-key",
+    "GEMINI_API_KEY": "@gemini-api-key",
+    "ADMIN_PASSWORD_HASH": "@admin-password-hash",
+    "ADMIN_EMAIL": "@admin-email",
+    "SESSION_SECRET": "@session-secret",
+    "PROVIDER_KEY_ENCRYPTION_SECRET": "@provider-key-encryption-secret"
+  }
+}
