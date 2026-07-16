@@ -30,6 +30,7 @@ export const translations = {
     navKnowledge: "Pusat Pengetahuan",
     navUsage: "Analitik Penggunaan",
     navRouting: "Routing Tugas",
+    navSpecs: "Spesifikasi Pekerjaan",
     navSettings: "Pengaturan",
 
     // Login
@@ -145,6 +146,7 @@ export const translations = {
     navKnowledge: "Knowledge Base",
     navUsage: "Usage Analytics",
     navRouting: "Job Routing",
+    navSpecs: "Job Specs",
     navSettings: "Settings",
 
     // Login

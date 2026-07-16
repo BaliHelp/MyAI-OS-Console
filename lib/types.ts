@@ -45,6 +45,6 @@ export interface KnowledgeDocument {
   created_at: string;
 }
 
-export type ViewType = 'overview' | 'apps' | 'knowledge' | 'routing' | 'usage' | 'settings';
+export type ViewType = 'overview' | 'apps' | 'knowledge' | 'routing' | 'specs' | 'usage' | 'settings';
 export type Language = 'id' | 'en';
 export type Theme = 'dark' | 'light';

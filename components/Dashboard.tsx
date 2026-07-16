@@ -10,6 +10,7 @@ import KnowledgeTab from "@/components/KnowledgeTab";
 import UsageTab from "@/components/UsageTab";
 import SettingsTab from "@/components/SettingsTab";
 import RoutingTab from "@/components/RoutingTab";
+import SpecsTab from "@/components/SpecsTab";
 
 interface DashboardProps {
   adminEmail: string;
@@ -211,6 +212,9 @@ export default function Dashboard({ adminEmail }: DashboardProps) {
             )}
             {activeTab === 'routing' && (
               <RoutingTab lang={lang} theme={theme} />
+            )}
+            {activeTab === 'specs' && (
+              <SpecsTab lang={lang} theme={theme} />
             )}
             {activeTab === 'settings' && (
               <SettingsTab
