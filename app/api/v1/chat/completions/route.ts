@@ -21,38 +21,23 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "API key token is empty" }, { status: 401 });
     }
 
-    let keyData: any = null;
-    let appName = "Sandbox Console";
-    let appSlug = "sandbox";
+    const keyHash = hashApiKey(gatewayKey);
 
-    if (gatewayKey === "admin-console-bypass") {
-      keyData = {
-        id: "sandbox-bypass-id",
-        client_app_id: "sandbox",
-        provider_scope: null,
-        rate_limit_per_day: null,
-        status: "active"
-      };
-    } else {
-      const keyHash = hashApiKey(gatewayKey);
+    // Fetch key and associated app metadata
+    const { data: keyData, error: keyError } = await supabaseAdmin
+      .from("gw_api_keys")
+      .select("id, client_app_id, provider_scope, rate_limit_per_day, status, gw_client_apps(name, slug)")
+      .eq("key_hash", keyHash)
+      .eq("status", "active")
+      .single();
 
-      // Fetch key and associated app metadata
-      const { data: dbKey, error: keyError } = await supabaseAdmin
-        .from("gw_api_keys")
-        .select("id, client_app_id, provider_scope, rate_limit_per_day, status, gw_client_apps(name, slug)")
-        .eq("key_hash", keyHash)
-        .eq("status", "active")
-        .maybeSingle();
-
-      if (keyError || !dbKey) {
-        return NextResponse.json({ error: "Invalid or inactive API key" }, { status: 401 });
-      }
-
-      keyData = dbKey;
-      const appInfo = keyData.gw_client_apps as any;
-      appName = appInfo?.name || "Client App";
-      appSlug = appInfo?.slug || "";
+    if (keyError || !keyData) {
+      return NextResponse.json({ error: "Invalid or inactive API key" }, { status: 401 });
     }
+
+    const appInfo = keyData.gw_client_apps as any;
+    const appName = appInfo?.name || "Client App";
+    const appSlug = appInfo?.slug || "";
 
     // 2. Rate Limit Checks (Daily limit per Key)
     if (keyData.rate_limit_per_day) {
@@ -563,7 +548,7 @@ ${knowledgeContext || "No product documents configured."}`;
 }
 
 // ── attemptCall Helper Function ──────────────────────────────────────────
-async function attemptCall(
+export async function attemptCall(
   provider: string,
   providerApiKey: string,
   prompt: string,

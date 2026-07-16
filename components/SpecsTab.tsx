@@ -149,11 +149,10 @@ export default function SpecsTab({ lang, theme }: SpecsTabProps) {
     setSandboxResult(null);
 
     try {
-      const res = await fetch("/api/v1/chat/completions", {
+      const res = await fetch("/api/internal/sandbox-test", {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
-          "Authorization": "Bearer admin-console-bypass"
+          "Content-Type": "application/json"
         },
         body: JSON.stringify({
           field: sandboxSpec.field_key,
