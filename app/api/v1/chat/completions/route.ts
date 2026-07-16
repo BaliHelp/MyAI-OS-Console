@@ -507,6 +507,9 @@ ${knowledgeContext || "No product documents configured."}`;
         .update({ last_used_at: new Date().toISOString() })
         .eq("id", keyData.id);
 
+      const isOcrField = fieldKey.startsWith("ocr_");
+      const isFallbackToGpt = isOcrField && providerUsed === "gpt";
+
       // Log usage transaction
       await supabaseAdmin.from("gw_usage_logs").insert({
         api_key_id: keyData.id,
@@ -519,7 +522,8 @@ ${knowledgeContext || "No product documents configured."}`;
         latency_ms: latencyMs,
         ip_address: req.headers.get("x-forwarded-for")?.split(",")[0] ?? "unknown",
         field_key: fieldKey,
-        pool_tier_used: tierUsed
+        pool_tier_used: tierUsed,
+        ocr_fallback_to_gpt: isFallbackToGpt
       });
     }
 
@@ -570,8 +574,9 @@ export async function attemptCall(
         });
       }
 
-      const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${providerApiKey}`,
+      let modelToUse = "gemini-3.1-flash-lite";
+      let res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${modelToUse}:generateContent?key=${providerApiKey}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -585,6 +590,27 @@ export async function attemptCall(
           }),
         }
       );
+
+      if (!res.ok) {
+        const firstErr = await res.json().catch(() => ({}));
+        console.warn(`[gateway] Gemini attempt with ${modelToUse} failed: ${firstErr.error?.message || "Unknown error"}. Retrying with gemini-3.5-flash...`);
+        modelToUse = "gemini-3.5-flash";
+        res = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${modelToUse}:generateContent?key=${providerApiKey}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contents: [{ parts }],
+              systemInstruction: { parts: [{ text: systemPrompt }] },
+              generationConfig: {
+                temperature: body.temperature ?? 0.7,
+                maxOutputTokens: body.max_tokens ?? 2000,
+              }
+            }),
+          }
+        );
+      }
 
       const resJson = await res.json().catch(() => ({}));
       if (!res.ok) {

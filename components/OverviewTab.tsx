@@ -385,7 +385,11 @@ export default function OverviewTab({ apps, apiKeys, logs, lang, theme }: Overvi
                           }`}>
                             {log.provider}
                           </span>
-                          {/* No simulated badges */}
+                          {log.ocr_fallback_to_gpt && (
+                            <span className="px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 text-[8px] font-extrabold uppercase border border-red-500/20 animate-pulse">
+                              Fallback to GPT
+                            </span>
+                          )}
                         </div>
                       </td>
                       <td className="py-3">

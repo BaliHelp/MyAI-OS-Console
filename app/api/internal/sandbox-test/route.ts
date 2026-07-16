@@ -331,8 +331,11 @@ export async function POST(req: NextRequest) {
           .eq("id", selectedKeyId);
       }
 
+      const isOcrField = fieldKey.startsWith("ocr_");
+      const isFallbackToGpt = isOcrField && providerUsed === "gpt";
+
       // Log usage transaction (api_key_id is NULL to indicate internal usage!)
-      await supabaseAdmin.from("gw_usage_logs").insert({
+      await supabaseAdmin!.from("gw_usage_logs").insert({
         api_key_id: null, // Critical flag for Sandbox Usage
         app_name: appName,
         provider: providerUsed,
@@ -343,7 +346,8 @@ export async function POST(req: NextRequest) {
         latency_ms: latencyMs,
         ip_address: req.headers.get("x-forwarded-for")?.split(",")[0] ?? "unknown",
         field_key: fieldKey,
-        pool_tier_used: tierUsed
+        pool_tier_used: tierUsed,
+        ocr_fallback_to_gpt: isFallbackToGpt
       });
     }
 

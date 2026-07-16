@@ -22,12 +22,13 @@ export interface ApiKey {
 
 export interface UsageLog {
   id: string;
-  api_key_id: string;
+  api_key_id: string | null;
   app_name?: string; // resolved in backend/frontend
-  provider: 'claude' | 'gpt' | 'gemini';
-  task_type: 'text' | 'image' | 'audio' | 'embeddings';
+  provider: string;
+  task_type: string;
   tokens_used: number;
   created_at: string;
+  ocr_fallback_to_gpt?: boolean;
 }
 
 export interface BusinessProfile {
