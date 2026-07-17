@@ -1,7 +1,7 @@
 # MyAI OS™ Console
-> **Infrastruktur Kecerdasan Buatan Terpusat untuk Ekosistem Bali Enterprises Group & IndoDesign.Website**
+> **Infrastruktur Kecerdasan Buatan Terpusat Bali Enterprises Group**
 
-MyAI OS™ adalah sistem **AI Gateway & Control Panel** terpadu yang menyatukan seluruh integrasi kecerdasan buatan (Large Language Models, Vision, dan OCR) untuk produk-produk di bawah naungan Bali Enterprises Group, termasuk layanan web premium dari **IndoDesign.Website**, **Indonesian Visas Agency**, dan **Tropic Tech**.
+MyAI OS™ adalah sistem **AI Gateway & Control Panel** terpadu yang dikembangkan oleh **Bali Technology** (divisi riset dan pengembangan teknologi dari **PT Indonesian Visas Agency**). Sistem ini menyinergikan seluruh integrasi kecerdasan buatan (Large Language Models, Vision, dan OCR) untuk produk-produk di bawah naungan Bali Enterprises Group (termasuk Indonesian Visas Agency, Tropic Tech, dan afiliasi lainnya), dengan **IndoDesign.website** sebagai kontributor utama antarmuka pengguna (UI) dan desain sistem.
 
 Console ini berfungsi sebagai pusat kendali administratif untuk mengelola kunci API penyedia AI, memantau kesehatan koneksi, menganalisis biaya, melacak audit keamanan, serta menyimpan repositori data terstruktur (Data Center).
 
