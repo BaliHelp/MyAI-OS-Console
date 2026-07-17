@@ -51,6 +51,23 @@ export default function OverviewTab({ apps, apiKeys, logs, lang, theme }: Overvi
   const [connections, setConnections] = useState<ApiConnection[]>([]);
   const [loadingConn, setLoadingConn] = useState(false);
 
+  // Provider key stats (gw_provider_keys)
+  const [providerKeyStats, setProviderKeyStats] = useState<{ active: number; total: number } | null>(null);
+
+  useEffect(() => {
+    fetch("/api/provider-keys")
+      .then(r => r.json())
+      .then((data: any[]) => {
+        if (Array.isArray(data)) {
+          setProviderKeyStats({
+            active: data.filter(k => k.status === 'active').length,
+            total: data.length,
+          });
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   const fetchConnectionStatuses = async () => {
     setLoadingConn(true);
     try {
@@ -92,11 +109,41 @@ export default function OverviewTab({ apps, apiKeys, logs, lang, theme }: Overvi
     return logs.length;
   }, [logs]);
 
+  // Cost quick-tab state for Overview card
+  const [costQuickTab, setCostQuickTab] = useState<'today' | '30d' | 'all'>('30d');
+
   const estimatedCost = useMemo(() => {
-    // Arbitrary realistic calculation ($1.50 per 1M tokens average)
-    const totalTokens = logs.reduce((sum, log) => sum + log.tokens_used, 0);
-    return ((totalTokens / 1000000) * 1.5).toFixed(2);
-  }, [logs]);
+    const COSTS: Record<string, number> = { gemini: 0.075, gpt: 0.15, claude: 3.00, grok: 2.0, deepseek: 0.14 };
+    const now = new Date();
+    let filtered = logs;
+    if (costQuickTab === 'today') {
+      const start = new Date(now); start.setHours(0,0,0,0);
+      filtered = logs.filter(l => new Date(l.created_at) >= start);
+    } else if (costQuickTab === '30d') {
+      const start = new Date(now.getTime() - 30 * 86400000);
+      filtered = logs.filter(l => new Date(l.created_at) >= start);
+    }
+
+    const mainLogs = filtered.filter(l => l.app_name !== "Internal Sandbox");
+    const sandboxLogs = filtered.filter(l => l.app_name === "Internal Sandbox");
+
+    const mainCost = mainLogs.reduce((sum, log) => {
+      const costPer1M = COSTS[log.provider] ?? 1.0;
+      return sum + (log.tokens_used / 1_000_000) * costPer1M;
+    }, 0);
+
+    const sandboxCost = sandboxLogs.reduce((sum, log) => {
+      const costPer1M = COSTS[log.provider] ?? 1.0;
+      return sum + (log.tokens_used / 1_000_000) * costPer1M;
+    }, 0);
+
+    return {
+      mainValue: mainCost.toFixed(4),
+      mainCount: mainLogs.length,
+      sandboxValue: sandboxCost.toFixed(4),
+      sandboxCount: sandboxLogs.length
+    };
+  }, [logs, costQuickTab]);
 
   // Aggregate 14-day logs by provider for the chart
   const chartData = useMemo(() => {
@@ -264,13 +311,20 @@ export default function OverviewTab({ apps, apiKeys, logs, lang, theme }: Overvi
           </div>
           <div className="mt-4">
             <span className="text-3xl font-extrabold tracking-tight text-bento-text-primary" id="stat-total-apps">{totalApps}</span>
-            <p className="text-[11px] text-bento-text-secondary mt-1 font-medium">
-              {activeKeys} of {apiKeys.length} active keys
-            </p>
+            <div className="mt-1 space-y-0.5">
+              <p className="text-[11px] text-bento-text-secondary font-medium">
+                {activeKeys} / {apiKeys.length} client API key aktif
+              </p>
+              {providerKeyStats && (
+                <p className="text-[11px] text-bento-text-secondary font-medium">
+                  {providerKeyStats.active} / {providerKeyStats.total} provider key aktif
+                </p>
+              )}
+            </div>
           </div>
         </div>
 
-        {/* Card 4: Est Cost (Stat 3) - Span 4 */}
+        {/* Card 4: Est Cost (Stat 3) - Span 4 with quick tabs */}
         <div className="col-span-1 md:col-span-6 lg:col-span-4 p-6 rounded-2xl border border-bento-border bg-bento-surface flex flex-col justify-between">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-bento-text-secondary uppercase tracking-wider">{t.cardEstCost}</span>
@@ -278,11 +332,32 @@ export default function OverviewTab({ apps, apiKeys, logs, lang, theme }: Overvi
               <DollarSign className="h-5 w-5" />
             </div>
           </div>
-          <div className="mt-4">
-            <span className="text-3xl font-extrabold tracking-tight text-bento-text-primary" id="stat-est-cost">${estimatedCost}</span>
-            <p className="text-[11px] text-bento-text-secondary mt-1 font-medium">
-              USD • Within budget
-            </p>
+          {/* Quick tabs */}
+          <div className="flex gap-1 mt-3">
+            {([['today','Harian'], ['30d','1 Bulan'], ['all','Semua']] as const).map(([val, label]) => (
+              <button
+                key={val}
+                onClick={() => setCostQuickTab(val)}
+                className={`px-2 py-0.5 rounded-lg text-[9px] font-bold transition-all ${
+                  costQuickTab === val ? 'bg-bento-success text-white' : 'text-bento-text-secondary hover:text-bento-text-primary'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <div className="mt-2">
+            <span className="text-3xl font-extrabold tracking-tight text-bento-text-primary" id="stat-est-cost">${estimatedCost.mainValue}</span>
+            <div className="mt-1 space-y-0.5">
+              <p className="text-[11px] text-bento-text-secondary font-medium">
+                USD • {estimatedCost.mainCount} panggilan
+              </p>
+              {parseFloat(estimatedCost.sandboxValue) > 0 && (
+                <p className="text-[10px] text-amber-500 font-semibold">
+                  Sandbox/Testing: ${estimatedCost.sandboxValue} ({estimatedCost.sandboxCount} calls)
+                </p>
+              )}
+            </div>
           </div>
         </div>
 
@@ -388,6 +463,11 @@ export default function OverviewTab({ apps, apiKeys, logs, lang, theme }: Overvi
                           {log.ocr_fallback_to_gpt && (
                             <span className="px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 text-[8px] font-extrabold uppercase border border-red-500/20 animate-pulse">
                               Fallback to GPT
+                            </span>
+                          )}
+                          {log.ocr_fallback_to_claude && (
+                            <span className="px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 text-[8px] font-extrabold uppercase border border-amber-500/20 animate-pulse">
+                              Fallback to Claude
                             </span>
                           )}
                         </div>

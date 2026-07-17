@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { supabaseAdmin } from "@/lib/supabase";
 import { hashApiKey } from "@/lib/crypto";
+import { logAudit } from "@/lib/audit";
 
 const uuid = () =>
   Math.random().toString(36).substring(2, 15) +
@@ -59,6 +60,13 @@ export async function POST(req: NextRequest) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  await logAudit({
+    action: 'create_api_key',
+    targetType: 'api_key',
+    targetId: newKey?.id,
+    detail: { client_app_id, key_prefix: keyPrefix, provider_scope, has_rate_limit: !!rate_limit_per_day },
+  });
 
   // Return full_key ONLY this once — it will never be retrievable again
   return NextResponse.json({ ...newKey, full_key: fullKey }, { status: 201 });

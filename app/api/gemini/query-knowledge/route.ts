@@ -58,7 +58,7 @@ ${docsContext || "No knowledge documents configured yet."}
 Answer the admin's question clearly, accurately, and professionally. Default to Bahasa Indonesia. Support English if requested. If the answer is not in the knowledge base, say so clearly.`;
 
     // ── Get API key: try provider_keys table first (LRU rotation), then env fallback ──
-    let apiKey = process.env.GEMINI_API_KEY ?? "";
+    let apiKey = process.env.GEMINI_API_KEY1 || process.env.GEMINI_API_KEY || "";
 
     if (supabaseAdmin) {
       const { data: providerKeys } = await supabaseAdmin

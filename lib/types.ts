@@ -28,7 +28,8 @@ export interface UsageLog {
   task_type: string;
   tokens_used: number;
   created_at: string;
-  ocr_fallback_to_gpt?: boolean;
+  ocr_fallback_to_gpt?:    boolean;
+  ocr_fallback_to_claude?: boolean;
 }
 
 export interface BusinessProfile {
@@ -46,6 +47,16 @@ export interface KnowledgeDocument {
   created_at: string;
 }
 
-export type ViewType = 'overview' | 'apps' | 'knowledge' | 'routing' | 'specs' | 'usage' | 'settings';
+export interface ChatPersona {
+  id: string;
+  client_app_id: string;
+  persona_name: string;
+  tone_description: string;
+  language_default: string;
+  must_never_say: string[];
+  updated_at: string;
+}
+
+export type ViewType = 'overview' | 'apps' | 'knowledge' | 'routing' | 'specs' | 'usage' | 'settings' | 'datacenter' | 'personas' | 'costs' | 'auditlog' | 'health';
 export type Language = 'id' | 'en';
 export type Theme = 'dark' | 'light';

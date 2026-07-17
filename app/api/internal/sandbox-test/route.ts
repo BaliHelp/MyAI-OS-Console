@@ -3,6 +3,7 @@ import { supabaseAdmin } from "@/lib/supabase";
 import { getSession } from "@/lib/auth";
 import { attemptCall } from "@/app/api/v1/chat/completions/route";
 import { decryptKey } from "@/lib/crypto";
+import { parseUploadedFile, type ParsedFileResult } from "@/lib/file-parser";
 import fs from "fs";
 import path from "path";
 
@@ -114,24 +115,33 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 5. Parse Vision document / file attachment
+    // 5. Deteksi dan parsing semua tipe file yang diunggah
     const fileBase64 = body.file || body.image;
-    let parsedFile: { mimeType: string; base64Data: string } | null = null;
+    let uploadedFile: ParsedFileResult | null = null;
+
     if (fileBase64) {
-      if (fileBase64.startsWith("data:")) {
-        const matches = fileBase64.match(/^data:([a-zA-Z0-9]+\/[a-zA-Z0-9-.+]+);base64,(.*)$/);
-        if (matches && matches.length >= 3) {
-          parsedFile = {
-            mimeType: matches[1],
-            base64Data: matches[2]
-          };
-        }
-      } else {
-        parsedFile = {
-          mimeType: "image/jpeg",
-          base64Data: fileBase64
-        };
+      uploadedFile = await parseUploadedFile(fileBase64);
+
+      if (uploadedFile.category === "unsupported") {
+        return NextResponse.json({ error: uploadedFile.error }, { status: 400 });
       }
+    }
+
+    // Kompatibilitas backward: parsedFile untuk vision pipeline
+    const parsedFile = uploadedFile?.imageData ? {
+      mimeType: uploadedFile.imageData.mimeType,
+      base64Data: uploadedFile.imageData.base64Data
+    } : null;
+
+    // Injeksi konten dokumen untuk tipe teks (PDF-text, DOCX, CSV, TXT)
+    let effectivePrompt = prompt;
+    if (uploadedFile?.extractedText) {
+      effectivePrompt = `--- ISI DOKUMEN (${uploadedFile.originalMimeType}) ---
+${uploadedFile.extractedText}
+--- AKHIR DOKUMEN ---
+
+${prompt}`;
+      console.log(`[sandbox] Injecting extracted text (${uploadedFile.extractedText.length} chars) for category: ${uploadedFile.category}`);
     }
 
     // 6. Execute Routing & Failover
@@ -147,6 +157,9 @@ export async function POST(req: NextRequest) {
     let tierUsed = 1;
     let providerUsed = "";
     const startTime = Date.now();
+
+    // Gunakan effectivePrompt sebagai prompt ke provider
+    const finalPrompt = effectivePrompt;
 
     // Group assignments by pool_tier
     const tierGroups: Record<number, string[]> = {};
@@ -211,7 +224,7 @@ export async function POST(req: NextRequest) {
           providerUsed = candidate.provider;
           const providerApiKey = candidate.key;
 
-          const resCall = await attemptCall(candidate.provider, providerApiKey, prompt, systemPrompt, body, selectedKeyId, selectedKeyLabel, parsedFile);
+          const resCall = await attemptCall(candidate.provider, providerApiKey, finalPrompt, systemPrompt, body, selectedKeyId, selectedKeyLabel, parsedFile);
           if (resCall.success) {
             aiResponseText = resCall.aiResponseText;
             promptTokens = resCall.promptTokens;
@@ -274,7 +287,7 @@ export async function POST(req: NextRequest) {
         providerUsed = candidate.provider;
         const providerApiKey = candidate.key;
 
-        const resCall = await attemptCall(candidate.provider, providerApiKey, prompt, systemPrompt, body, selectedKeyId, selectedKeyLabel, parsedFile);
+        const resCall = await attemptCall(candidate.provider, providerApiKey, finalPrompt, systemPrompt, body, selectedKeyId, selectedKeyLabel, parsedFile);
         if (resCall.success) {
           aiResponseText = resCall.aiResponseText;
           promptTokens = resCall.promptTokens;
@@ -331,8 +344,9 @@ export async function POST(req: NextRequest) {
           .eq("id", selectedKeyId);
       }
 
-      const isOcrField = fieldKey.startsWith("ocr_");
-      const isFallbackToGpt = isOcrField && providerUsed === "gpt";
+      const isOcrField = fieldKey.startsWith("ocr_") || fieldKey === "visa_registration_extraction";
+      const isFallbackToGpt    = isOcrField && providerUsed === "gpt";
+      const isFallbackToClaude = isOcrField && providerUsed === "claude";
 
       // Log usage transaction (api_key_id is NULL to indicate internal usage!)
       await supabaseAdmin!.from("gw_usage_logs").insert({
@@ -347,18 +361,32 @@ export async function POST(req: NextRequest) {
         ip_address: req.headers.get("x-forwarded-for")?.split(",")[0] ?? "unknown",
         field_key: fieldKey,
         pool_tier_used: tierUsed,
-        ocr_fallback_to_gpt: isFallbackToGpt
+        ocr_fallback_to_gpt:    isFallbackToGpt,
+        ocr_fallback_to_claude: isFallbackToClaude
       });
     }
 
     // 8. Return wrapped response in standard envelope
     let result: any = aiResponseText;
+    let dataCenterId: string | null = null;
+    
     if (fieldSpec?.output_schema) {
       try {
         const cleanedText = aiResponseText.replace(/```json/g, "").replace(/```/g, "").trim();
         result = JSON.parse(cleanedText);
+
+        const { saveToDataCenter } = require("@/lib/data-center");
+        dataCenterId = await saveToDataCenter({
+          client_app_id: null,
+          field_key: fieldKey,
+          source_type: "ocr_upload",
+          extracted_data: result,
+          raw_text: uploadedFile?.extractedText || aiResponseText,
+          fileBase64: uploadedFile ? `data:${uploadedFile.originalMimeType};base64,${uploadedFile.originalBase64}` : fileBase64,
+          fileMimeType: uploadedFile?.originalMimeType || null
+        });
       } catch (e) {
-        console.warn("[sandbox] Failed to parse structured output JSON:", e);
+        console.warn("[sandbox] Failed to parse structured output JSON or save to Data Center:", e);
       }
     }
 
@@ -367,7 +395,8 @@ export async function POST(req: NextRequest) {
       schema_version: "1.0",
       provider_used: providerUsed,
       processed_at: new Date().toISOString(),
-      result: result
+      result: result,
+      ...(dataCenterId ? { data_center_id: dataCenterId } : {})
     });
 
   } catch (err: any) {

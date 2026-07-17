@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { decryptKey, hashApiKey } from "@/lib/crypto";
+import { parseUploadedFile, type ParsedFileResult } from "@/lib/file-parser";
 import fs from "fs";
 import path from "path";
 
@@ -73,25 +74,30 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Prompt or messages are required" }, { status: 400 });
     }
 
-    // Support file uploads (base64 string images)
+    // ── Deteksi dan parsing semua tipe file yang diunggah ─────────────────
     const fileBase64 = body.file || body.image;
-    let parsedFile: { mimeType: string; base64Data: string } | null = null;
+    let uploadedFile: ParsedFileResult | null = null;
+
     if (fileBase64) {
-      if (fileBase64.startsWith("data:")) {
-        const matches = fileBase64.match(/^data:([a-zA-Z0-9]+\/[a-zA-Z0-9-.+]+);base64,(.*)$/);
-        if (matches && matches.length >= 3) {
-          parsedFile = {
-            mimeType: matches[1],
-            base64Data: matches[2]
-          };
-        }
-      } else {
-        parsedFile = {
-          mimeType: "image/jpeg",
-          base64Data: fileBase64
-        };
+      uploadedFile = await parseUploadedFile(fileBase64);
+
+      if (uploadedFile.category === "unsupported") {
+        return NextResponse.json({ error: uploadedFile.error }, { status: 400 });
+      }
+
+      // Untuk pdf-scanned, hanya Gemini yang didukung
+      // (GPT/Claude tidak bisa menerima PDF langsung)
+      if (uploadedFile.category === "pdf-scanned") {
+        // Tandai di body agar bisa digunakan di routing
+        (body as any).__pdfScanned = true;
       }
     }
+
+    // Kompatibilitas backward: parsedFile untuk vision pipeline (image / pdf-scanned)
+    const parsedFile = uploadedFile?.imageData ? {
+      mimeType: uploadedFile.imageData.mimeType,
+      base64Data: uploadedFile.imageData.base64Data
+    } : null;
 
     // ── 3a. Validate Job Routing Field ────────────────────────────────────
     let validKeys = [
@@ -255,6 +261,49 @@ export async function POST(req: NextRequest) {
       resolvedSystemPrompt = `You are a helpful AI assistant for "${appName}". Jawab dengan jelas dan profesional.`;
     }
 
+    // 4c. Injeksi Persona untuk chat fields (chatbot_general, chatbot_checkout)
+    const CHAT_FIELDS = ["chatbot_general", "chatbot_checkout"];
+    if (CHAT_FIELDS.includes(fieldKey) && supabaseAdmin) {
+      try {
+        const { data: persona } = await supabaseAdmin
+          .from("gw_chat_personas")
+          .select("persona_name, tone_description, language_default, must_never_say")
+          .eq("client_app_id", keyData.client_app_id)
+          .maybeSingle();
+
+        if (persona) {
+          const neverSayLines = (persona.must_never_say || [])
+            .map((rule: string) => `- ${rule}`)
+            .join("\n");
+
+          const personaBlock = `--- PERSONA ---
+Nama: ${persona.persona_name}
+Tone & Gaya: ${persona.tone_description}
+Bahasa Default: ${persona.language_default === "id" ? "Bahasa Indonesia" : "English"}
+Aturan Wajib (JANGAN PERNAH dilanggar):
+${neverSayLines || "- (tidak ada)"}
+--- INSTRUKSI TUGAS ---
+${resolvedSystemPrompt}`;
+
+          resolvedSystemPrompt = personaBlock;
+          console.log(`[gateway] Persona injected for field '${fieldKey}': ${persona.persona_name}`);
+        } else {
+          // Tidak ada persona terkonfigurasi — fallback ke persona generik, log warning
+          console.warn(
+            `[gateway] WARNING: Tidak ada persona untuk client_app_id=${keyData.client_app_id} pada field=${fieldKey}. ` +
+            `Menggunakan persona generik. Konfigurasikan persona di dashboard.`
+          );
+          resolvedSystemPrompt = `--- PERSONA ---
+Nama: AI Assistant (Generic)
+Tone & Gaya: Netral, profesional, membantu
+--- INSTRUKSI TUGAS ---
+${resolvedSystemPrompt}`;
+        }
+      } catch (personaErr) {
+        console.warn("[gateway] Gagal fetch persona, lanjut tanpa persona:", personaErr);
+      }
+    }
+
     // Append core knowledge base context
     resolvedSystemPrompt += `\n\nBerikut adalah profil korporat dan basis pengetahuan produk kami. Gunakan informasi ini jika relevan untuk menjawab pertanyaan:
 
@@ -264,7 +313,20 @@ ${profileContent}
 Product Knowledge Base Context:
 ${knowledgeContext || "No product documents configured."}`;
 
+    // ── Injeksi konten dokumen untuk tipe teks (PDF-text, DOCX, CSV, TXT) ──
+    let effectivePrompt = prompt;
+    if (uploadedFile?.extractedText) {
+      effectivePrompt = `--- ISI DOKUMEN (${uploadedFile.originalMimeType}) ---
+${uploadedFile.extractedText}
+--- AKHIR DOKUMEN ---
+
+${prompt}`;
+      console.log(`[gateway] Injecting extracted text (${uploadedFile.extractedText.length} chars) into prompt for category: ${uploadedFile.category}`);
+    }
+
     const systemPrompt = resolvedSystemPrompt;
+    // Gunakan effectivePrompt sebagai prompt yang dikirim ke provider
+    prompt = effectivePrompt;
 
     // 5. Execute Routing & Failover across Tiers and Providers
     let success = false;
@@ -507,8 +569,9 @@ ${knowledgeContext || "No product documents configured."}`;
         .update({ last_used_at: new Date().toISOString() })
         .eq("id", keyData.id);
 
-      const isOcrField = fieldKey.startsWith("ocr_");
-      const isFallbackToGpt = isOcrField && providerUsed === "gpt";
+      const isOcrField = fieldKey.startsWith("ocr_") || fieldKey === "visa_registration_extraction";
+      const isFallbackToGpt    = isOcrField && providerUsed === "gpt";
+      const isFallbackToClaude = isOcrField && providerUsed === "claude";
 
       // Log usage transaction
       await supabaseAdmin.from("gw_usage_logs").insert({
@@ -523,27 +586,68 @@ ${knowledgeContext || "No product documents configured."}`;
         ip_address: req.headers.get("x-forwarded-for")?.split(",")[0] ?? "unknown",
         field_key: fieldKey,
         pool_tier_used: tierUsed,
-        ocr_fallback_to_gpt: isFallbackToGpt
+        ocr_fallback_to_gpt:    isFallbackToGpt,
+        ocr_fallback_to_claude: isFallbackToClaude
       });
     }
 
     // 8. Return wrapped response in standard envelope
     let result: any = aiResponseText;
+    let dataCenterId: string | null = null;
+    
     if (fieldSpec?.output_schema) {
       try {
         const cleanedText = aiResponseText.replace(/```json/g, "").replace(/```/g, "").trim();
         result = JSON.parse(cleanedText);
+
+        const { saveToDataCenter } = require("@/lib/data-center");
+        dataCenterId = await saveToDataCenter({
+          client_app_id: keyData.client_app_id,
+          field_key: fieldKey,
+          source_type: "ocr_upload",
+          extracted_data: result,
+          // Untuk dokumen teks: simpan teks yang diekstrak, bukan response JSON mentah
+          raw_text: uploadedFile?.extractedText || aiResponseText,
+          // Simpan file ORIGINAL (bukan konversi WebP)
+          fileBase64: uploadedFile ? `data:${uploadedFile.originalMimeType};base64,${uploadedFile.originalBase64}` : fileBase64,
+          fileMimeType: uploadedFile?.originalMimeType || null
+        });
       } catch (e) {
-        console.warn("[gateway] Failed to parse structured output JSON:", e);
+        console.warn("[gateway] Failed to parse structured output JSON or save to Data Center:", e);
       }
     }
+
+    // 9. Log non-OCR AI interactions to Data Center (chatbot, content, etc.)
+    if (supabaseAdmin && !fieldSpec?.output_schema) {
+      const isChatbot = fieldKey.startsWith("chatbot_") || fieldKey === "chatbot";
+      const isContent = fieldKey.startsWith("content_");
+      if (isChatbot || isContent) {
+        try {
+          const { saveToDataCenter } = require("@/lib/data-center");
+          await saveToDataCenter({
+            client_app_id: keyData.client_app_id,
+            field_key: fieldKey,
+            source_type: isChatbot ? "chatbot_interaction" : "content_generation",
+            extracted_data: {},
+            raw_text: [
+              `[PROMPT] ${prompt.substring(0, 500)}`,
+              `[RESPONSE] ${aiResponseText.substring(0, 1000)}`
+            ].join("\n---\n"),
+          });
+        } catch (e) {
+          console.warn("[gateway] Failed to log AI interaction to Data Center:", e);
+        }
+      }
+    }
+
 
     return NextResponse.json({
       field: fieldKey,
       schema_version: "1.0",
       provider_used: providerUsed,
       processed_at: new Date().toISOString(),
-      result: result
+      result: result,
+      ...(dataCenterId ? { data_center_id: dataCenterId } : {})
     });
 
   } catch (err: any) {
@@ -552,6 +656,10 @@ ${knowledgeContext || "No product documents configured."}`;
 }
 
 // ── attemptCall Helper Function ──────────────────────────────────────────
+// Uses the central ProviderAdapter registry instead of hardcoded if/else chains.
+// To support a new provider, add its adapter to lib/provider-adapters/index.ts only.
+import { PROVIDER_REGISTRY } from "@/lib/provider-adapters";
+
 export async function attemptCall(
   provider: string,
   providerApiKey: string,
@@ -562,281 +670,23 @@ export async function attemptCall(
   selectedKeyLabel: string,
   parsedFile?: { mimeType: string; base64Data: string } | null
 ) {
-  try {
-    if (provider === "gemini") {
-      const parts: any[] = [{ text: prompt }];
-      if (parsedFile) {
-        parts.push({
-          inlineData: {
-            mimeType: parsedFile.mimeType,
-            data: parsedFile.base64Data
-          }
-        });
-      }
-
-      let modelToUse = "gemini-3.1-flash-lite";
-      let res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${modelToUse}:generateContent?key=${providerApiKey}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [{ parts }],
-            systemInstruction: { parts: [{ text: systemPrompt }] },
-            generationConfig: {
-              temperature: body.temperature ?? 0.7,
-              maxOutputTokens: body.max_tokens ?? 2000,
-            }
-          }),
-        }
-      );
-
-      if (!res.ok) {
-        const firstErr = await res.json().catch(() => ({}));
-        console.warn(`[gateway] Gemini attempt with ${modelToUse} failed: ${firstErr.error?.message || "Unknown error"}. Retrying with gemini-3.5-flash...`);
-        modelToUse = "gemini-3.5-flash";
-        res = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${modelToUse}:generateContent?key=${providerApiKey}`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              contents: [{ parts }],
-              systemInstruction: { parts: [{ text: systemPrompt }] },
-              generationConfig: {
-                temperature: body.temperature ?? 0.7,
-                maxOutputTokens: body.max_tokens ?? 2000,
-              }
-            }),
-          }
-        );
-      }
-
-      const resJson = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        const errorMsg = resJson.error?.message || "Gemini API error";
-        console.warn(`[gateway] Gemini key failed: ${selectedKeyLabel}. Status: ${res.status}. Error: ${errorMsg}`);
-        
-        if (res.status === 400) {
-          return { success: false, errorMsg, status: 400 };
-        }
-
-        if (selectedKeyId && supabaseAdmin && (res.status === 401 || res.status === 403)) {
-          console.warn(`[gateway] Auto-disabling key in DB: ${selectedKeyLabel}`);
-          await supabaseAdmin
-            .from("gw_provider_keys")
-            .update({ status: "disabled" })
-            .eq("id", selectedKeyId);
-        }
-
-        return { success: false, errorMsg, status: res.status };
-      }
-
-      const aiResponseText = resJson.candidates?.[0]?.content?.parts?.[0]?.text || "";
-      const promptTokens = Math.ceil(prompt.length / 4) + Math.ceil(systemPrompt.length / 4);
-      const completionTokens = Math.ceil(aiResponseText.length / 4);
-      return { success: true, aiResponseText, promptTokens, completionTokens, errorMsg: "", status: 200 };
-    }
-
-    if (provider === "gpt") {
-      let contentArray: any[] = [{ type: "text", text: prompt }];
-      if (parsedFile) {
-        contentArray.push({
-          type: "image_url",
-          image_url: {
-            url: `data:${parsedFile.mimeType};base64,${parsedFile.base64Data}`
-          }
-        });
-      }
-
-      const res = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${providerApiKey}`
-        },
-        body: JSON.stringify({
-          model: body.model_name || "gpt-4o-mini",
-          messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: contentArray }
-          ],
-          temperature: body.temperature ?? 0.7,
-          max_tokens: body.max_tokens ?? 2000,
-        }),
-      });
-
-      const resJson = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        const errorMsg = resJson.error?.message || "OpenAI API error";
-        console.warn(`[gateway] GPT key failed: ${selectedKeyLabel}. Status: ${res.status}. Error: ${errorMsg}`);
-
-        if (res.status === 400) {
-          return { success: false, errorMsg, status: 400 };
-        }
-
-        if (selectedKeyId && supabaseAdmin && (res.status === 401 || res.status === 403)) {
-          console.warn(`[gateway] Auto-disabling key in DB: ${selectedKeyLabel}`);
-          await supabaseAdmin
-            .from("gw_provider_keys")
-            .update({ status: "disabled" })
-            .eq("id", selectedKeyId);
-        }
-
-        return { success: false, errorMsg, status: res.status };
-      }
-
-      const aiResponseText = resJson.choices?.[0]?.message?.content || "";
-      const promptTokens = resJson.usage?.prompt_tokens || 0;
-      const completionTokens = resJson.usage?.completion_tokens || 0;
-      return { success: true, aiResponseText, promptTokens, completionTokens, errorMsg: "", status: 200 };
-    }
-
-    if (provider === "claude") {
-      let contentArray: any[] = [{ type: "text", text: prompt }];
-      if (parsedFile) {
-        contentArray.push({
-          type: "image",
-          source: {
-            type: "base64",
-            media_type: parsedFile.mimeType,
-            data: parsedFile.base64Data
-          }
-        });
-      }
-
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": providerApiKey,
-          "anthropic-version": "2023-06-01"
-        },
-        body: JSON.stringify({
-          model: body.model_name || "claude-3-5-sonnet-20241022",
-          max_tokens: body.max_tokens ?? 2000,
-          system: systemPrompt,
-          messages: [{ role: "user", content: contentArray }],
-          temperature: body.temperature ?? 0.7,
-        }),
-      });
-
-      const resJson = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        const errorMsg = resJson.error?.message || "Anthropic API error";
-        console.warn(`[gateway] Claude key failed: ${selectedKeyLabel}. Status: ${res.status}. Error: ${errorMsg}`);
-
-        if (res.status === 400) {
-          return { success: false, errorMsg, status: 400 };
-        }
-
-        if (selectedKeyId && supabaseAdmin && (res.status === 401 || res.status === 403)) {
-          console.warn(`[gateway] Auto-disabling key in DB: ${selectedKeyLabel}`);
-          await supabaseAdmin
-            .from("gw_provider_keys")
-            .update({ status: "disabled" })
-            .eq("id", selectedKeyId);
-        }
-
-        return { success: false, errorMsg, status: res.status };
-      }
-
-      const aiResponseText = resJson.content?.[0]?.text || "";
-      const promptTokens = resJson.usage?.input_tokens || 0;
-      const completionTokens = resJson.usage?.output_tokens || 0;
-      return { success: true, aiResponseText, promptTokens, completionTokens, errorMsg: "", status: 200 };
-    }
-
-    if (provider === "grok") {
-      const res = await fetch("https://api.x.ai/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${providerApiKey}`
-        },
-        body: JSON.stringify({
-          model: body.model_name || "grok-2",
-          messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: prompt }
-          ],
-          temperature: body.temperature ?? 0.7,
-        }),
-      });
-
-      const resJson = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        const errorMsg = resJson.error?.message || "Grok API error";
-        console.warn(`[gateway] Grok key failed: ${selectedKeyLabel}. Status: ${res.status}. Error: ${errorMsg}`);
-
-        if (res.status === 400) {
-          return { success: false, errorMsg, status: 400 };
-        }
-
-        if (selectedKeyId && supabaseAdmin && (res.status === 401 || res.status === 403)) {
-          console.warn(`[gateway] Auto-disabling key in DB: ${selectedKeyLabel}`);
-          await supabaseAdmin
-            .from("gw_provider_keys")
-            .update({ status: "disabled" })
-            .eq("id", selectedKeyId);
-        }
-
-        return { success: false, errorMsg, status: res.status };
-      }
-
-      const aiResponseText = resJson.choices?.[0]?.message?.content || "";
-      const promptTokens = resJson.usage?.prompt_tokens || 0;
-      const completionTokens = resJson.usage?.completion_tokens || 0;
-      return { success: true, aiResponseText, promptTokens, completionTokens, errorMsg: "", status: 200 };
-    }
-
-    if (provider === "deepseek") {
-      const res = await fetch("https://api.deepseek.com/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${providerApiKey}`
-        },
-        body: JSON.stringify({
-          model: body.model_name || "deepseek-chat",
-          messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: prompt }
-          ],
-          temperature: body.temperature ?? 0.7,
-          max_tokens: body.max_tokens ?? 2000,
-        }),
-      });
-
-      const resJson = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        const errorMsg = resJson.error?.message || "Deepseek API error";
-        console.warn(`[gateway] Deepseek key failed: ${selectedKeyLabel}. Status: ${res.status}. Error: ${errorMsg}`);
-
-        if (res.status === 400) {
-          return { success: false, errorMsg, status: 400 };
-        }
-
-        if (selectedKeyId && supabaseAdmin && (res.status === 401 || res.status === 403)) {
-          console.warn(`[gateway] Auto-disabling key in DB: ${selectedKeyLabel}`);
-          await supabaseAdmin
-            .from("gw_provider_keys")
-            .update({ status: "disabled" })
-            .eq("id", selectedKeyId);
-        }
-
-        return { success: false, errorMsg, status: res.status };
-      }
-
-      const aiResponseText = resJson.choices?.[0]?.message?.content || "";
-      const promptTokens = resJson.usage?.prompt_tokens || 0;
-      const completionTokens = resJson.usage?.completion_tokens || 0;
-      return { success: true, aiResponseText, promptTokens, completionTokens, errorMsg: "", status: 200 };
-    }
-
-    return { success: false, errorMsg: `Unsupported provider: ${provider}`, status: 400 };
-  } catch (err: any) {
-    console.error(`[gateway] Exception while calling ${selectedKeyLabel}:`, err);
-    return { success: false, errorMsg: err.message || "Network error or timeout", status: 500 };
+  const adapter = PROVIDER_REGISTRY[provider];
+  if (!adapter) {
+    return { success: false, errorMsg: `Unsupported provider: ${provider}`, status: 400, aiResponseText: "", promptTokens: 0, completionTokens: 0 };
   }
+
+  return adapter.call(
+    providerApiKey,
+    prompt,
+    systemPrompt,
+    {
+      temperature: body.temperature,
+      max_tokens: body.max_tokens,
+      model_name: body.model_name,
+    },
+    parsedFile ?? null,
+    selectedKeyId,
+    selectedKeyLabel
+  );
 }
+

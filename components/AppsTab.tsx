@@ -1,6 +1,12 @@
 'use client';
 
 import { useState, useMemo, FormEvent } from "react";
+
+// ── Provider List ────────────────────────────────────────────────────────────
+// This is the single source of truth for supported providers in the UI.
+// Kept in-component to avoid Next.js client/server boundary issues with lib/.
+// When adding a new provider: add adapter to lib/provider-adapters/, then add here.
+const SUPPORTED_PROVIDERS = ["gemini", "gpt", "claude", "grok", "deepseek"];
 import { 
   AppWindow, 
   Plus, 
@@ -46,7 +52,7 @@ export default function AppsTab({ apps, apiKeys, lang, theme, onCreateApp, onGen
 
   // Create Key Modal & Display Key
   const [isKeyModalOpen, setIsKeyModalOpen] = useState(false);
-  const [keyScope, setKeyScope] = useState<string[]>(["claude", "gpt", "gemini"]);
+  const [keyScope, setKeyScope] = useState<string[]>(["gemini", "gpt", "claude"]);
   const [keyRateLimit, setKeyRateLimit] = useState<string>("");
   const [generatedKeyResult, setGeneratedKeyResult] = useState<{ full_key: string } | null>(null);
   const [copied, setCopied] = useState(false);
@@ -97,7 +103,7 @@ export default function AppsTab({ apps, apiKeys, lang, theme, onCreateApp, onGen
       const res = await onGenerateKey(selectedApp.id, keyScope, limit);
       setGeneratedKeyResult({ full_key: res.full_key });
       // Reset values
-      setKeyScope(["claude", "gpt", "gemini"]);
+      setKeyScope(["gemini", "gpt", "claude"]);
       setKeyRateLimit("");
     } catch (err: any) {
       alert("Failed to generate API Key");
@@ -204,11 +210,6 @@ export default function AppsTab({ apps, apiKeys, lang, theme, onCreateApp, onGen
                             {key.provider_scope.map(sc => (
                               <span key={sc} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-black/10 text-[9px] uppercase font-bold text-gray-300">
                                 {sc}
-                                {sc !== 'gemini' ? (
-                                  <span className="text-[7px] font-semibold text-orange-400 font-sans lowercase">(simulated)</span>
-                                ) : (
-                                  <span className="text-[7px] font-semibold text-emerald-400 font-sans lowercase">(live)</span>
-                                )}
                               </span>
                             ))}
                           </div>
@@ -446,8 +447,8 @@ export default function AppsTab({ apps, apiKeys, lang, theme, onCreateApp, onGen
               <form onSubmit={handleGenerateKeySubmit} className="space-y-4">
                 <div className="space-y-2">
                   <label className="text-xs font-semibold text-bento-text-secondary">{t.keyScope}</label>
-                  <div className="grid grid-cols-3 gap-3">
-                    {["claude", "gpt", "gemini"].map(prov => {
+                  <div className="grid grid-cols-3 gap-3 sm:grid-cols-5">
+                    {SUPPORTED_PROVIDERS.map(prov => {
                       const isChecked = keyScope.includes(prov);
                       return (
                         <button
@@ -469,9 +470,6 @@ export default function AppsTab({ apps, apiKeys, lang, theme, onCreateApp, onGen
                           <span className={`w-1.5 h-1.5 rounded-full ${isChecked ? 'bg-bento-accent animate-pulse' : 'bg-bento-text-secondary/50'}`} />
                           <span className="flex flex-col items-start leading-tight">
                             <span>{prov}</span>
-                            <span className={`text-[7px] font-normal lowercase ${prov !== 'gemini' ? 'text-orange-400' : 'text-emerald-400'}`}>
-                              {prov !== 'gemini' ? 'simulated' : 'live'}
-                            </span>
                           </span>
                         </button>
                       );

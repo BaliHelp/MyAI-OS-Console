@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import { supabaseAdmin } from "@/lib/supabase";
 import { createSession } from "@/lib/auth";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
+import { logAudit } from "@/lib/audit";
 
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "rimbanusaonline@gmail.com";
 const ADMIN_PASSWORD_HASH = process.env.ADMIN_PASSWORD_HASH || "";
@@ -73,6 +74,7 @@ export async function POST(req: NextRequest) {
     : password === passwordHash;
 
   if (!isValid) {
+    await logAudit({ action: 'login_failed', actorEmail: email, targetType: 'auth', detail: { reason: 'wrong_password' }, ipAddress: ip });
     return NextResponse.json(
       { error: "Email atau password salah." },
       { status: 401 }
@@ -109,5 +111,6 @@ export async function POST(req: NextRequest) {
   });
 
   await createSession(res, { email, role: "owner" });
+  await logAudit({ action: 'login_success', actorEmail: email, targetType: 'auth', detail: {}, ipAddress: ip });
   return res;
 }

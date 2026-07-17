@@ -231,6 +231,11 @@ export default function UsageTab({ apps, logs, lang, theme }: UsageTabProps) {
                             Fallback to GPT
                           </span>
                         )}
+                        {log.ocr_fallback_to_claude && (
+                          <span className="px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 text-[8px] font-extrabold uppercase border border-amber-500/20 animate-pulse">
+                            Fallback to Claude
+                          </span>
+                        )}
                       </div>
                     </td>
                     <td className="py-3">

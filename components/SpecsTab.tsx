@@ -425,11 +425,11 @@ export default function SpecsTab({ lang, theme }: SpecsTabProps) {
 
                 {/* File Upload Dropzone */}
                 <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-bento-text-secondary uppercase">Attachment / Document Image</label>
+                  <label className="text-[10px] font-bold text-bento-text-secondary uppercase">Attachment / Document File</label>
                   <div className="relative border-2 border-dashed border-bento-border rounded-xl p-6 bg-bento-surface-lighter flex flex-col items-center justify-center hover:border-bento-accent/50 hover:bg-bento-surface-lighter/50 transition-all group">
                     <input
                       type="file"
-                      accept="image/*"
+                      accept="image/*,application/pdf,.pdf,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/csv,.csv,text/plain,.txt"
                       onChange={handleFileChange}
                       className="absolute inset-0 opacity-0 cursor-pointer"
                     />
@@ -438,7 +438,7 @@ export default function SpecsTab({ lang, theme }: SpecsTabProps) {
                       {sandboxFileName ? sandboxFileName : "Upload file / scan dokumen"}
                     </span>
                     <span className="text-[10px] text-bento-text-secondary mt-1">
-                      Mendukung format gambar JPEG/PNG hingga 4MB.
+                      Mendukung: JPG, PNG, HEIC, PDF, DOCX, CSV, TXT — maks 2MB.
                     </span>
                   </div>
                   {sandboxFileBase64 && (

@@ -32,6 +32,10 @@ export const translations = {
     navRouting: "Routing Tugas",
     navSpecs: "Spesifikasi Pekerjaan",
     navSettings: "Pengaturan",
+    navDataCenter: "Data Center",
+    navCosts: "Estimasi Biaya",
+    navAuditLog: "Audit Log",
+    navHealth: "Kesehatan Sistem",
 
     // Login
     loginTitle: "Masuk ke OS Console",
@@ -148,6 +152,10 @@ export const translations = {
     navRouting: "Job Routing",
     navSpecs: "Job Specs",
     navSettings: "Settings",
+    navDataCenter: "Data Center",
+    navCosts: "Cost Estimate",
+    navAuditLog: "Audit Log",
+    navHealth: "System Health",
 
     // Login
     loginTitle: "Log in to OS Console",

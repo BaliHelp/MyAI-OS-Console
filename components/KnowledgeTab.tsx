@@ -260,10 +260,10 @@ export default function KnowledgeTab({
         <div className="lg:col-span-2 space-y-6">
           <div className="p-6 rounded-2xl border border-bento-border bg-bento-surface" id="documents-wiki-card">
             {/* Filter and Add button row */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-              <div className="flex flex-wrap items-center gap-3">
+            <div className="flex flex-col gap-3 mb-6">
+              <div className="flex flex-wrap items-center gap-2">
                 <span className="text-xs text-bento-text-secondary font-semibold">Filter:</span>
-                <div className="flex items-center p-0.5 rounded-lg border border-bento-border bg-bento-surface-lighter text-xs">
+                <div className="flex flex-wrap items-center gap-1 p-0.5 rounded-lg border border-bento-border bg-bento-surface-lighter text-xs">
                   <button
                     onClick={() => setDocFilterAppId("all")}
                     id="doc-filter-btn-all"
@@ -304,14 +304,17 @@ export default function KnowledgeTab({
                 </div>
               </div>
 
-              <button
-                onClick={handleOpenCreateDoc}
-                id="add-doc-btn"
-                className="flex items-center gap-1 px-3 py-2 text-xs font-bold rounded-xl bg-bento-accent hover:bg-bento-accent/90 text-white shrink-0 shadow-xs transition-all duration-150"
-              >
-                <Plus className="h-4 w-4" />
-                <span>{t.btnNewDoc}</span>
-              </button>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-bento-text-secondary">{filteredDocuments.length} dokumen</span>
+                <button
+                  onClick={handleOpenCreateDoc}
+                  id="add-doc-btn"
+                  className="flex items-center gap-1 px-3 py-2 text-xs font-bold rounded-xl bg-bento-accent hover:bg-bento-accent/90 text-white shrink-0 shadow-xs transition-all duration-150"
+                >
+                  <Plus className="h-4 w-4" />
+                  <span>{t.btnNewDoc}</span>
+                </button>
+              </div>
             </div>
 
             {/* List of Wiki Articles */}

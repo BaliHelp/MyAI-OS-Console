@@ -12,6 +12,7 @@ export async function GET(req: NextRequest) {
     const { data: keys, error: fetchError } = await supabaseAdmin
       .from("gw_provider_keys")
       .select("id, provider, label, key_encrypted, status")
+      .eq("status", "active")
       .order("label", { ascending: true })
       .order("created_at", { ascending: true });
 

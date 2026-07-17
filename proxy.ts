@@ -4,12 +4,15 @@ import { getSession } from "@/lib/auth";
 // Routes that do NOT require authentication
 const PUBLIC_PATHS = [
   "/login",
+  "/terms",
+  "/privacy",
+  "/docs",
+  "/api-reference",
+  "/examples",
+  "/guides",
   "/api/auth/login",
   "/api/auth/logout",
-  "/api/auth/register",
   "/api/auth/forgot-password",
-  "/api/auth/peek",
-  "/api/test-list-keys",
   "/api/v1/chat/completions",
   "/_next",
   "/favicon.ico"
@@ -25,7 +28,7 @@ export async function proxy(req: NextRequest) {
 
   // Protect all other routes
   const session = await getSession(req);
-  if (!session) {
+  if (!session || session.role !== 'owner') {
     // API routes return 401, pages redirect to login
     if (pathname.startsWith("/api/")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { supabaseAdmin } from "@/lib/supabase";
 import { getSession } from "@/lib/auth";
+import { logAudit } from "@/lib/audit";
 
 export async function POST(req: NextRequest) {
   const session = await getSession(req);
@@ -72,7 +73,9 @@ export async function POST(req: NextRequest) {
       if (insertError) return NextResponse.json({ error: insertError.message }, { status: 500 });
     }
 
+    await logAudit({ action: 'change_password', actorEmail: session.email, targetType: 'auth', detail: {} });
     return NextResponse.json({ success: true });
+
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     return NextResponse.json({ error: `Gagal mengubah password: ${msg}` }, { status: 500 });
