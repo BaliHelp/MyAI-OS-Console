@@ -47,8 +47,8 @@ export default function Sidebar({ activeTab, setActiveTab, lang, theme, adminEma
       
       {/* Brand Header */}
       <div className={`p-4 border-b border-bento-border flex items-center ${collapsed ? 'justify-center' : 'gap-3'}`}>
-        <div className="p-2 rounded-lg bg-bento-accent-muted text-bento-accent shrink-0">
-          <Code className="h-5 w-5" id="brand-logo-icon" />
+        <div className="h-9 w-9 rounded-xl overflow-hidden shrink-0 flex items-center justify-center bg-bento-surface border border-bento-border/50 p-0.5">
+          <img src="/Favicon.webp" alt="Logo" className="h-full w-full object-contain" />
         </div>
         {!collapsed && (
           <div className="overflow-hidden">

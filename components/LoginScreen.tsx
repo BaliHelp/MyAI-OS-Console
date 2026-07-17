@@ -95,8 +95,8 @@ export default function LoginScreen() {
 
         {/* Brand Header */}
         <div className="text-center space-y-3">
-          <div className="mx-auto w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg transition-transform hover:scale-105 bg-[#5B8DEF]/10 text-[#5B8DEF]">
-            <Code className="h-7 w-7" />
+          <div className="mx-auto w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg transition-transform hover:scale-105 bg-[#111215] border border-[#1D1E22] overflow-hidden p-1 bg-gradient-to-br from-[#1A1C20] to-[#111215]">
+            <img src="/Favicon.webp" alt="Logo" className="h-full w-full object-contain" />
           </div>
           <div className="space-y-1">
             <h1 className="text-2xl font-bold tracking-tight">{t.appName}</h1>
