@@ -26,6 +26,17 @@ export async function proxy(req: NextRequest) {
     return NextResponse.next();
   }
 
+  // Allow static assets directly from root
+  if (
+    pathname.endsWith(".webp") ||
+    pathname.endsWith(".png") ||
+    pathname.endsWith(".jpg") ||
+    pathname.endsWith(".ico") ||
+    pathname.endsWith(".svg")
+  ) {
+    return NextResponse.next();
+  }
+
   // Protect all other routes
   const session = await getSession(req);
   if (!session || session.role !== 'owner') {
