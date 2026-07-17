@@ -96,9 +96,9 @@ export async function importEnvProviderKeys(): Promise<void> {
         dbKey.label?.startsWith("Deepseek Key ");
       
       if (isLegacyAutoImported) {
-        // Delete it from the DB!
-        console.log(`[migrate] Deleting legacy auto-imported key not in .env: ${dbKey.label} (${dbKey.id})`);
-        await supabaseAdmin.from("gw_provider_keys").delete().eq("id", dbKey.id);
+        // Keep it in DB so database acts as the single source of truth,
+        // even if Vercel server starts without these environment variables.
+        console.log(`[migrate] Keep legacy auto-imported key in DB: ${dbKey.label}`);
       }
     }
   }
