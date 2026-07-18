@@ -105,6 +105,112 @@ export default function OverviewTab({ apps, apiKeys, logs, lang, theme }: Overvi
   const totalApps = apps.length;
   const activeKeys = apiKeys.filter(k => k.status === 'active').length;
   
+  const [appsListExpanded, setAppsListExpanded] = useState(false);
+
+  const appActivityStats = useMemo(() => {
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    
+    // Temukan aplikasi yang memiliki log dalam 7 hari terakhir (case-insensitive matching)
+    const activeAppNames = new Set<string>();
+    logs.forEach(log => {
+      if (new Date(log.created_at) >= sevenDaysAgo && log.app_name) {
+        activeAppNames.add(log.app_name.trim().toLowerCase());
+      }
+    });
+
+    const list = apps.map(app => {
+      const isActive = activeAppNames.has(app.name.trim().toLowerCase()) || 
+                       activeAppNames.has(app.slug.trim().toLowerCase());
+      return {
+        id: app.id,
+        name: app.name,
+        isActive
+      };
+    });
+
+    const activeCount = list.filter(item => item.isActive).length;
+
+    return {
+      list,
+      activeCount,
+      totalCount: apps.length
+    };
+  }, [apps, logs]);
+
+  const providerBreakdown = useMemo(() => {
+    const counts: Record<string, number> = {};
+    let total = 0;
+    logs.forEach(log => {
+      const p = (log.provider || "others").toLowerCase();
+      counts[p] = (counts[p] || 0) + 1;
+      total++;
+    });
+
+    const list = Object.entries(counts).map(([provider, count]) => {
+      const percent = total > 0 ? Math.round((count / total) * 100) : 0;
+      let displayName = provider.toUpperCase();
+      if (provider === 'gpt') displayName = 'GPT';
+      if (provider === 'gemini') displayName = 'Gemini';
+      if (provider === 'claude') displayName = 'Claude';
+      if (provider === 'grok') displayName = 'Grok';
+      if (provider === 'deepseek') displayName = 'Deepseek';
+      return {
+        provider,
+        displayName,
+        count,
+        percent
+      };
+    });
+
+    // Urutkan berdasarkan frekuensi panggilan terbanyak
+    list.sort((a, b) => b.count - a.count);
+    return { list, total };
+  }, [logs]);
+
+  const trendStats = useMemo(() => {
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+
+    let thisMonthCount = 0;
+    let lastMonthCount = 0;
+
+    logs.forEach(log => {
+      const d = new Date(log.created_at);
+      if (d.getFullYear() === currentYear && d.getMonth() === currentMonth) {
+        thisMonthCount++;
+      } else if (
+        (currentMonth === 0 && d.getFullYear() === currentYear - 1 && d.getMonth() === 11) ||
+        (currentMonth > 0 && d.getFullYear() === currentYear && d.getMonth() === currentMonth - 1)
+      ) {
+        lastMonthCount++;
+      }
+    });
+
+    let percent = 0;
+    let isIncrease = true;
+    let hasComparison = true;
+
+    if (lastMonthCount > 0) {
+      const diff = thisMonthCount - lastMonthCount;
+      percent = Math.round((Math.abs(diff) / lastMonthCount) * 100);
+      isIncrease = diff >= 0;
+    } else {
+      percent = thisMonthCount > 0 ? 100 : 0;
+      isIncrease = true;
+      hasComparison = thisMonthCount > 0;
+    }
+
+    return {
+      thisMonthCount,
+      lastMonthCount,
+      percent,
+      isIncrease,
+      hasComparison
+    };
+  }, [logs]);
+
   const totalCallsThisMonth = useMemo(() => {
     return logs.length;
   }, [logs]);
@@ -285,42 +391,124 @@ export default function OverviewTab({ apps, apiKeys, logs, lang, theme }: Overvi
         </div>
 
         {/* Card 2: Total API Calls (Stat 1) - Span 4 */}
-        <div className="col-span-1 md:col-span-6 lg:col-span-4 p-6 rounded-2xl border border-bento-border bg-bento-surface flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-bento-text-secondary uppercase tracking-wider">{t.cardTotalCalls}</span>
-            <div className="p-2 rounded-xl bg-bento-accent-muted text-bento-accent">
-              <Cpu className="h-5 w-5" />
+        <div className="col-span-1 md:col-span-6 lg:col-span-4 p-6 rounded-2xl border border-bento-border bg-bento-surface flex flex-col justify-between transition-all duration-300">
+          <div>
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-bento-text-secondary uppercase tracking-wider">{t.cardTotalCalls}</span>
+              <div className="p-2 rounded-xl bg-bento-accent-muted text-bento-accent">
+                <Cpu className="h-5 w-5" />
+              </div>
+            </div>
+            <div className="mt-4">
+              <span className="text-3xl font-extrabold tracking-tight text-bento-text-primary" id="stat-total-calls">{totalCallsThisMonth}</span>
+              <div className="text-[11px] font-semibold mt-1 flex flex-wrap items-center gap-1.5">
+                {trendStats.hasComparison ? (
+                  <span className={trendStats.isIncrease ? 'text-bento-success' : 'text-red-400'}>
+                    {trendStats.isIncrease ? '↑' : '↓'} {trendStats.percent}% {lang === 'id' ? 'dari bulan lalu' : 'from last month'}
+                  </span>
+                ) : (
+                  <span className="text-bento-text-secondary">{lang === 'id' ? 'Belum ada pembanding' : 'No comparison data'}</span>
+                )}
+                <span className="text-gray-500/50">•</span>
+                <div className="flex items-center gap-1 text-bento-success">
+                  <span className="w-1.5 h-1.5 rounded-full bg-bento-success animate-ping" />
+                  <span>realtime stream</span>
+                </div>
+              </div>
             </div>
           </div>
-          <div className="mt-4">
-            <span className="text-3xl font-extrabold tracking-tight text-bento-text-primary" id="stat-total-calls">{totalCallsThisMonth}</span>
-            <div className="text-[11px] text-bento-success font-semibold mt-1 flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-bento-success animate-ping" />
-              <span>realtime stream</span>
+
+          {/* Breakdown mini per provider */}
+          <div className="mt-4 border-t border-bento-border/50 pt-3 space-y-2">
+            <span className="text-[10px] font-bold text-bento-text-secondary uppercase tracking-wider">Breakdown Provider</span>
+            <div className="space-y-1.5 max-h-[120px] overflow-y-auto pr-1">
+              {providerBreakdown.list.length === 0 ? (
+                <p className="text-[10px] text-bento-text-secondary italic">Belum ada data panggilan.</p>
+              ) : (
+                providerBreakdown.list.map(item => {
+                  const barColor = item.provider === 'claude' 
+                    ? 'bg-[#E879F9]' 
+                    : item.provider === 'gpt' 
+                      ? 'bg-bento-success' 
+                      : item.provider === 'gemini' 
+                        ? 'bg-bento-accent' 
+                        : item.provider === 'grok'
+                          ? 'bg-amber-400'
+                          : item.provider === 'deepseek'
+                            ? 'bg-sky-400'
+                            : 'bg-indigo-400';
+                  return (
+                    <div key={item.provider} className="space-y-0.5">
+                      <div className="flex items-center justify-between text-[10px] font-bold">
+                        <span className="text-bento-text-primary">{item.displayName}</span>
+                        <span className="text-bento-text-secondary">{item.count}x ({item.percent}%)</span>
+                      </div>
+                      <div className="w-full h-1.5 rounded-full bg-bento-surface-lighter overflow-hidden border border-bento-border/30">
+                        <div className={`h-full ${barColor}`} style={{ width: `${item.percent}%` }} />
+                      </div>
+                    </div>
+                  );
+                })
+              )}
             </div>
           </div>
         </div>
 
         {/* Card 3: Active Applications & Keys (Stat 2) - Span 4 */}
-        <div className="col-span-1 md:col-span-6 lg:col-span-4 p-6 rounded-2xl border border-bento-border bg-bento-surface flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-bento-text-secondary uppercase tracking-wider">{t.cardTotalApps}</span>
-            <div className="p-2 rounded-xl bg-[#E879F9]/10 text-[#E879F9]">
-              <AppWindow className="h-5 w-5" />
+        <div className="col-span-1 md:col-span-6 lg:col-span-4 p-6 rounded-2xl border border-bento-border bg-bento-surface flex flex-col justify-between transition-all duration-300">
+          <div>
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-bento-text-secondary uppercase tracking-wider">{t.cardTotalApps}</span>
+              <div className="p-2 rounded-xl bg-[#E879F9]/10 text-[#E879F9]">
+                <AppWindow className="h-5 w-5" />
+              </div>
+            </div>
+            <div className="mt-4">
+              <span className="text-3xl font-extrabold tracking-tight text-bento-text-primary" id="stat-total-apps">
+                {appActivityStats.activeCount} <span className="text-sm font-normal text-bento-text-secondary">aktif dari {appActivityStats.totalCount}</span>
+              </span>
+              <div className="mt-2 space-y-1.5">
+                <p className="text-[11px] text-bento-text-secondary font-medium">
+                  {activeKeys} / {apiKeys.length} client API key aktif
+                </p>
+                {providerKeyStats && (
+                  <p className="text-[11px] text-bento-text-secondary font-medium">
+                    {providerKeyStats.active} / {providerKeyStats.total} provider key aktif
+                  </p>
+                )}
+              </div>
             </div>
           </div>
-          <div className="mt-4">
-            <span className="text-3xl font-extrabold tracking-tight text-bento-text-primary" id="stat-total-apps">{totalApps}</span>
-            <div className="mt-1 space-y-0.5">
-              <p className="text-[11px] text-bento-text-secondary font-medium">
-                {activeKeys} / {apiKeys.length} client API key aktif
-              </p>
-              {providerKeyStats && (
-                <p className="text-[11px] text-bento-text-secondary font-medium">
-                  {providerKeyStats.active} / {providerKeyStats.total} provider key aktif
-                </p>
-              )}
-            </div>
+
+          <div className="mt-4 border-t border-bento-border/50 pt-3">
+            <button
+              type="button"
+              onClick={() => setAppsListExpanded(!appsListExpanded)}
+              className="text-[10px] font-bold text-bento-accent hover:underline flex items-center justify-between w-full focus:outline-none"
+            >
+              <span>{appsListExpanded ? "Sembunyikan Status" : "Lihat Status Aplikasi"}</span>
+              <span className="text-xs">{appsListExpanded ? "▲" : "▼"}</span>
+            </button>
+            {appsListExpanded && (
+              <div className="mt-2.5 max-h-[120px] overflow-y-auto pr-1 space-y-2 animate-fade-in">
+                {appActivityStats.list.length === 0 ? (
+                  <p className="text-[10px] text-bento-text-secondary italic">Belum ada aplikasi terdaftar.</p>
+                ) : (
+                  appActivityStats.list.map(app => (
+                    <div key={app.id} className="flex items-center justify-between text-[11px] py-0.5">
+                      <span className="font-semibold text-bento-text-primary truncate max-w-[150px]">{app.name}</span>
+                      <span className={`px-2 py-0.5 rounded text-[8px] font-extrabold uppercase ${
+                        app.isActive 
+                          ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/15' 
+                          : 'bg-gray-500/10 text-gray-400 border border-gray-500/15'
+                      }`}>
+                        {app.isActive ? "Aktif" : "Belum Ada Aktivitas"}
+                      </span>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
           </div>
         </div>
 

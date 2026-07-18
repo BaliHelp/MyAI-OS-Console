@@ -24,12 +24,13 @@ import {
   Eye,
   Activity
 } from "lucide-react";
-import { ClientApp, ApiKey, Language } from "@/lib/types";
+import { ClientApp, ApiKey, UsageLog, Language } from "@/lib/types";
 import { translations } from "@/lib/i18n";
 
 interface AppsTabProps {
   apps: ClientApp[];
   apiKeys: ApiKey[];
+  logs: UsageLog[];
   lang: Language;
   theme: 'dark' | 'light';
   onCreateApp: (name: string, slug: string, tier: 'internal' | 'community') => Promise<void>;
@@ -37,7 +38,7 @@ interface AppsTabProps {
   onRevokeKey: (keyId: string) => Promise<void>;
 }
 
-export default function AppsTab({ apps, apiKeys, lang, theme, onCreateApp, onGenerateKey, onRevokeKey }: AppsTabProps) {
+export default function AppsTab({ apps, apiKeys, logs, lang, theme, onCreateApp, onGenerateKey, onRevokeKey }: AppsTabProps) {
   const t = translations[lang];
 
   // Tab State
@@ -223,6 +224,18 @@ export default function AppsTab({ apps, apiKeys, lang, theme, onCreateApp, onGen
                           {/* Created at */}
                           <div>
                             <span>Dibuat: {new Date(key.created_at).toLocaleDateString()}</span>
+                          </div>
+
+                          {/* Terakhir Dipakai */}
+                          <div className="flex items-center gap-1">
+                            <Clock className="h-3 w-3 opacity-60" />
+                            <span>Terakhir: <strong className="text-gray-300 font-semibold">{key.last_used_at ? new Date(key.last_used_at).toLocaleString("id-ID") : "Belum Pernah Dipakai"}</strong></span>
+                          </div>
+
+                          {/* Total Panggilan */}
+                          <div className="flex items-center gap-1">
+                            <Activity className="h-3.5 w-3.5 opacity-60" />
+                            <span>Panggilan: <strong className="text-gray-300 font-bold">{logs.filter(l => l.api_key_id === key.id).length}x</strong></span>
                           </div>
                         </div>
                       </div>

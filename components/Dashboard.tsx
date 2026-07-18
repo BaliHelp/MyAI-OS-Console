@@ -192,6 +192,7 @@ export default function Dashboard({ adminEmail }: DashboardProps) {
               <AppsTab
                 apps={apps}
                 apiKeys={apiKeys}
+                logs={logs}
                 lang={lang}
                 theme={theme}
                 onCreateApp={handleCreateApp}
