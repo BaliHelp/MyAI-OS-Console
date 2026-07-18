@@ -16,6 +16,8 @@ import PersonasTab from "@/components/PersonasTab";
 import CostsTab from "./CostsTab";
 import AuditLogTab from "./AuditLogTab";
 import HealthTab from "./HealthTab";
+import ThreeDLoader from "./ThreeDLoader";
+import GlobalLoader from "./GlobalLoader";
 
 interface DashboardProps {
   adminEmail: string;
@@ -32,6 +34,32 @@ export default function Dashboard({ adminEmail }: DashboardProps) {
   const [businessProfile, setBusinessProfile] = useState<BusinessProfile | null>(null);
   const [documents, setDocuments] = useState<KnowledgeDocument[]>([]);
   const [loading, setLoading] = useState(true);
+  const [globalLoading, setGlobalLoading] = useState(false);
+
+  // Global fetch activity tracker
+  useEffect(() => {
+    const originalFetch = window.fetch;
+    let activeCount = 0;
+
+    window.fetch = async (...args) => {
+      activeCount++;
+      setGlobalLoading(true);
+      try {
+        const response = await originalFetch(...args);
+        return response;
+      } finally {
+        activeCount--;
+        if (activeCount <= 0) {
+          activeCount = 0;
+          setGlobalLoading(false);
+        }
+      }
+    };
+
+    return () => {
+      window.fetch = originalFetch;
+    };
+  }, []);
 
   // Restore theme/lang from localStorage
   useEffect(() => {
@@ -147,21 +175,7 @@ export default function Dashboard({ adminEmail }: DashboardProps) {
   };
 
   if (loading || !businessProfile) {
-    return (
-      <div className={`min-h-screen w-full flex flex-col items-center justify-center transition-colors duration-200 ${
-        theme === 'dark' ? 'bg-[#060709] text-white' : 'bg-[#FAFAFA] text-[#1F2937]'
-      }`}>
-        <div className="space-y-4 text-center">
-          <div className="w-12 h-12 rounded-2xl bg-[#5B8DEF]/10 text-[#5B8DEF] flex items-center justify-center mx-auto animate-spin">
-            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-            </svg>
-          </div>
-          <p className="text-xs font-semibold tracking-wider uppercase opacity-60">Initializing MyAI OS Console...</p>
-        </div>
-      </div>
-    );
+    return <ThreeDLoader />;
   }
 
   return (
@@ -249,6 +263,7 @@ export default function Dashboard({ adminEmail }: DashboardProps) {
           </div>
         </main>
       </div>
+      <GlobalLoader loading={globalLoading} />
     </div>
   );
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { LayoutDashboard, AppWindow, Database, BarChart3, Settings, LogOut, Code, ChevronLeft, ChevronRight, Route, Sparkles, Server, Bot, DollarSign, ShieldCheck, Activity } from "lucide-react";
 import { ViewType, Language } from "@/lib/types";
 import { translations } from "@/lib/i18n";
@@ -18,6 +18,17 @@ export default function Sidebar({ activeTab, setActiveTab, lang, theme, adminEma
   const t = translations[lang] as any;
   const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
+
+  // Auto-collapse on mobile, auto-expand on desktop
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 767px)');
+    const handler = (e: MediaQueryListEvent | MediaQueryList) => {
+      setCollapsed(e.matches);
+    };
+    handler(mq); // run once on mount
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
 
   const menuItems = [
     { id: 'overview' as ViewType, label: t.navOverview, icon: LayoutDashboard },
@@ -46,16 +57,30 @@ export default function Sidebar({ activeTab, setActiveTab, lang, theme, adminEma
     } ${theme === 'dark' ? 'bg-[#0F1012]' : 'bg-[#F9FAFB]'}`}>
       
       {/* Brand Header */}
-      <div className={`p-4 border-b border-bento-border flex items-center ${collapsed ? 'justify-center' : 'gap-3'}`}>
-        <div className="h-9 w-9 rounded-xl overflow-hidden shrink-0 flex items-center justify-center bg-bento-surface border border-bento-border/50 p-0.5">
-          <img src="/Favicon.webp" alt="Logo" className="h-full w-full object-contain" />
-        </div>
-        {!collapsed && (
-          <div className="overflow-hidden">
-            <h1 className="font-bold text-base tracking-tight truncate" id="sidebar-app-title">MyAI OS</h1>
-            <p className="text-[10px] font-medium tracking-widest uppercase opacity-60 text-bento-text-secondary">Ecosystem Console</p>
+      <div className={`p-4 border-b border-bento-border flex ${
+        collapsed ? 'flex-col justify-center gap-3 items-center' : 'items-center justify-between gap-3'
+      }`}>
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="h-9 w-9 rounded-xl overflow-hidden shrink-0 flex items-center justify-center bg-bento-surface border border-bento-border/50 p-0.5">
+            <img src="/Favicon.webp" alt="Logo" className="h-full w-full object-contain" />
           </div>
-        )}
+          {!collapsed && (
+            <div className="overflow-hidden">
+              <h1 className="font-bold text-base tracking-tight truncate" id="sidebar-app-title">MyAI OS</h1>
+              <p className="text-[10px] font-medium tracking-widest uppercase opacity-60 text-bento-text-secondary">Ecosystem Console</p>
+            </div>
+          )}
+        </div>
+
+        {/* Collapse toggle */}
+        <button
+          onClick={() => setCollapsed(!collapsed)}
+          id="sidebar-collapse-btn"
+          title={collapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+          className={`p-1.5 rounded-lg text-bento-text-secondary hover:text-bento-text-primary hover:bg-bento-surface-lighter transition-all duration-150 shrink-0 border border-bento-border/30`}
+        >
+          {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+        </button>
       </div>
 
       {/* Navigation Links */}
@@ -115,14 +140,6 @@ export default function Sidebar({ activeTab, setActiveTab, lang, theme, adminEma
           {!collapsed && <span>{t.logout}</span>}
         </button>
 
-        {/* Collapse toggle */}
-        <button
-          onClick={() => setCollapsed(!collapsed)}
-          id="sidebar-collapse-btn"
-          className="w-full flex items-center justify-center py-2 rounded-xl text-bento-text-secondary hover:text-bento-text-primary hover:bg-bento-surface-lighter transition-all duration-150"
-        >
-          {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
-        </button>
       </div>
     </aside>
   );
