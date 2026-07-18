@@ -15,3 +15,8 @@ REVOKE EXECUTE ON FUNCTION public.rls_auto_enable() FROM authenticated;
 -- 4. Batasi agar hanya postgres, service_role, dan superuser yang dapat mengeksekusi
 GRANT EXECUTE ON FUNCTION public.rls_auto_enable() TO postgres;
 GRANT EXECUTE ON FUNCTION public.rls_auto_enable() TO service_role;
+
+-- 5. Selesaikan warning 'Extension in Public' untuk pgvector
+-- Pindahkan extension vector ke skema 'extensions' sesuai best practice Supabase
+CREATE SCHEMA IF NOT EXISTS extensions;
+ALTER EXTENSION vector SET SCHEMA extensions;
