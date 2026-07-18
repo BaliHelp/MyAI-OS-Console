@@ -326,6 +326,7 @@ export default function RoutingTab({ lang, theme }: RoutingTabProps) {
                       <option value="claude">Anthropic Claude</option>
                       <option value="grok">x.ai Grok</option>
                       <option value="deepseek">Deepseek AI</option>
+                      <option value="others">Others (GLM, Llama, DLL)</option>
                     </select>
                   </div>
                 ))}

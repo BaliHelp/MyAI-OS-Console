@@ -8,7 +8,7 @@ export async function GET() {
   }
   const { data, error } = await supabaseAdmin
     .from("gw_provider_keys")
-    .select("id, provider, label, status, usage_count, last_used_at, created_at, key_encrypted")
+    .select("id, provider, label, status, usage_count, last_used_at, created_at, key_encrypted, base_url, model_name")
     .order("label", { ascending: true })
     .order("created_at", { ascending: true });
 
@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
   if (!supabaseAdmin) {
     return NextResponse.json({ error: "Database not configured" }, { status: 503 });
   }
-  const { provider, label, api_key } = await req.json();
+  const { provider, label, api_key, base_url, model_name } = await req.json();
 
   if (!provider || !api_key) {
     return NextResponse.json({ error: "provider and api_key are required" }, { status: 400 });
@@ -43,8 +43,15 @@ export async function POST(req: NextRequest) {
 
   const { data, error } = await supabaseAdmin
     .from("gw_provider_keys")
-    .insert({ provider, label: label ?? null, key_encrypted: keyEncrypted, status: "active" })
-    .select("id, provider, label, status, usage_count, last_used_at, created_at")
+    .insert({ 
+      provider, 
+      label: label ?? null, 
+      key_encrypted: keyEncrypted, 
+      status: "active",
+      base_url: base_url ?? null,
+      model_name: model_name ?? null
+    })
+    .select("id, provider, label, status, usage_count, last_used_at, created_at, base_url, model_name")
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

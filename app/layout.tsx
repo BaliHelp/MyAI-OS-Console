@@ -8,6 +8,14 @@ export const metadata: Metadata = {
     template: "%s — MyAI OS"
   },
   description: "MyAI OS adalah AI Gateway terpusat untuk ekosistem Bali Enterprises Group, dikembangkan oleh Bali Technology (divisi riset PT Indonesian Visas Agency) dengan IndoDesign.website sebagai kontributor antarmuka (UI/design). Menyinergikan integrasi kecerdasan buatan terpadu untuk pelopor infrastruktur AI lokal Indonesia.",
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true
+    }
+  },
   openGraph: {
     title: "MyAI OS Console",
     description: "MyAI OS adalah AI Gateway terpusat untuk ekosistem Bali Enterprises Group, dikembangkan oleh Bali Technology (divisi riset PT Indonesian Visas Agency) dengan IndoDesign.website sebagai kontributor antarmuka.",
@@ -45,6 +53,73 @@ export default function RootLayout({
         <link
           href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
           rel="stylesheet"
+        />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              "@context": "https://schema.org",
+              "@graph": [
+                {
+                  "@type": "Organization",
+                  "@id": "https://myai.bali.technology/#organization",
+                  "name": "MyAI OS",
+                  "legalName": "MyAI OS - a Bali Technology product",
+                  "url": "https://console.myai.bali.technology",
+                  "description": "MyAI OS adalah AI Gateway terpusat yang menyatukan seluruh integrasi kecerdasan buatan untuk ekosistem Bali Enterprises Group — dipersiapkan menjadi pelopor infrastruktur AI lokal Indonesia, mendukung Indonesian Visas, MyBusiness, Tropic Tech, dan divisi lainnya di bawah satu kendali terpusat.",
+                  "parentOrganization": {
+                    "@type": "Organization",
+                    "name": "Bali Technology",
+                    "url": "https://bali.technology"
+                  },
+                  "memberOf": {
+                    "@type": "Corporation",
+                    "@id": "https://indonesianvisas.com/#organization",
+                    "name": "PT Indonesian Visas Agency",
+                    "url": "https://indonesianvisas.com"
+                  },
+                  "founder": {
+                    "@type": "Person",
+                    "name": "Bayu Damopolii-Manoppo",
+                    "jobTitle": "Founder & Strategic Director",
+                    "url": "https://www.linkedin.com/in/balihelp/"
+                  },
+                  "location": {
+                    "@type": "Place",
+                    "address": {
+                      "@type": "PostalAddress",
+                      "addressRegion": "Bali",
+                      "addressCountry": "ID"
+                    }
+                  },
+                  "sameAs": ["https://indonesianvisas.com", "https://bali.enterprises", "https://bali.technology"]
+                },
+                {
+                  "@type": "WebSite",
+                  "@id": "https://console.myai.bali.technology/#website",
+                  "url": "https://console.myai.bali.technology",
+                  "name": "MyAI OS Console",
+                  "publisher": { "@id": "https://myai.bali.technology/#organization" },
+                  "inLanguage": "id-ID"
+                },
+                {
+                  "@type": "SoftwareApplication",
+                  "@id": "https://console.myai.bali.technology/#software",
+                  "name": "MyAI OS Console",
+                  "applicationCategory": "BusinessApplication",
+                  "operatingSystem": "Web",
+                  "description": "Panel kendali AI Gateway terpusat: manajemen multi-provider AI (Gemini, GPT, Claude, dan lainnya), routing tugas berbasis field, knowledge base bersama, dan data center ekstraksi dokumen untuk seluruh ekosistem Bali Enterprises Group.",
+                  "creator": { "@id": "https://myai.bali.technology/#organization" },
+                  "featureList": [
+                    "Multi-provider AI routing dengan failover otomatis",
+                    "Shared knowledge base lintas aplikasi",
+                    "Data center ekstraksi dokumen terpusat",
+                    "Audit log dan monitoring kesehatan sistem real-time"
+                  ]
+                }
+              ]
+            })
+          }}
         />
       </head>
       <body suppressHydrationWarning>{children}</body>

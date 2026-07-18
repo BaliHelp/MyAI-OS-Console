@@ -23,6 +23,8 @@ interface ProviderKey {
   created_at: string;
   key_masked: string;
   key_plain?: string;
+  base_url?: string | null;
+  model_name?: string | null;
 }
 
 export default function SettingsTab({ lang, setLang, theme, setTheme, adminEmail }: SettingsTabProps) {
@@ -80,18 +82,47 @@ export default function SettingsTab({ lang, setLang, theme, setTheme, adminEmail
       setTestingKeys(prev => ({ ...prev, [id]: false }));
     }
   };
+  const [testingAll, setTestingAll] = useState(false);
+
+  const handleTestAllConnections = async () => {
+    setTestingAll(true);
+    setTestResults({});
+    
+    try {
+      const res = await fetch("/api/provider-keys/test-all");
+      if (res.ok) {
+        const data = await res.json();
+        const newResults: Record<string, { connected: boolean; details: string }> = {};
+        data.forEach((item: any) => {
+          newResults[item.id] = { connected: item.connected, details: item.details || "" };
+        });
+        setTestResults(newResults);
+      } else {
+        alert(lang === 'id' ? "Gagal menguji semua koneksi." : "Failed to test all connections.");
+      }
+    } catch {
+      alert(lang === 'id' ? "Gagal menghubungi server." : "Failed to connect to server.");
+    } finally {
+      setTestingAll(false);
+    }
+  };
   
   // New key form
   const [provider, setProvider] = useState("gemini");
   const [label, setLabel] = useState("");
   const [apiKey, setApiKey] = useState("");
+  const [baseUrl, setBaseUrl] = useState("");
+  const [modelName, setModelName] = useState("");
   const [addingKey, setAddingKey] = useState(false);
   const [error, setError] = useState("");
 
-  // Change Password State
+  // Change Password State & Visibility toggles
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [showCurrentPw, setShowCurrentPw] = useState(false);
+  const [showNewPw, setShowNewPw] = useState(false);
+  const [showConfirmPw, setShowConfirmPw] = useState(false);
   const [pwError, setPwError] = useState("");
   const [pwSuccess, setPwSuccess] = useState("");
   const [changingPw, setChangingPw] = useState(false);
@@ -170,7 +201,13 @@ export default function SettingsTab({ lang, setLang, theme, setTheme, adminEmail
       const res = await fetch("/api/provider-keys", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ provider, label, api_key: apiKey }),
+        body: JSON.stringify({ 
+          provider, 
+          label, 
+          api_key: apiKey,
+          base_url: provider === "others" ? baseUrl : null,
+          model_name: provider === "others" ? modelName : null
+        }),
       });
 
       if (!res.ok) {
@@ -180,6 +217,8 @@ export default function SettingsTab({ lang, setLang, theme, setTheme, adminEmail
 
       setLabel("");
       setApiKey("");
+      setBaseUrl("");
+      setModelName("");
       await fetchProviderKeys();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Gagal menambahkan API key.");
@@ -305,38 +344,65 @@ export default function SettingsTab({ lang, setLang, theme, setTheme, adminEmail
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-bento-text-secondary">Password Saat Ini</label>
-                  <input
-                    type="password"
-                    required
-                    value={currentPassword}
-                    onChange={(e) => setCurrentPassword(e.target.value)}
-                    placeholder="Sandi lama Anda"
-                    className="w-full px-4 py-2.5 text-xs rounded-xl border border-bento-border bg-bento-surface-lighter text-bento-text-primary focus:outline-none focus:border-bento-accent"
-                  />
+                  <div className="relative">
+                    <input
+                      type={showCurrentPw ? "text" : "password"}
+                      required
+                      value={currentPassword}
+                      onChange={(e) => setCurrentPassword(e.target.value)}
+                      placeholder="Sandi lama Anda"
+                      className="w-full pl-4 pr-10 py-2.5 text-xs rounded-xl border border-bento-border bg-bento-surface-lighter text-bento-text-primary focus:outline-none focus:border-bento-accent"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowCurrentPw(!showCurrentPw)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-bento-text-secondary hover:text-bento-text-primary focus:outline-none"
+                    >
+                      {showCurrentPw ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                    </button>
+                  </div>
                 </div>
 
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-bento-text-secondary">Password Baru</label>
-                  <input
-                    type="password"
-                    required
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    placeholder="Minimal 8 karakter"
-                    className="w-full px-4 py-2.5 text-xs rounded-xl border border-bento-border bg-bento-surface-lighter text-bento-text-primary focus:outline-none focus:border-bento-accent"
-                  />
+                  <div className="relative">
+                    <input
+                      type={showNewPw ? "text" : "password"}
+                      required
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      placeholder="Minimal 8 karakter"
+                      className="w-full pl-4 pr-10 py-2.5 text-xs rounded-xl border border-bento-border bg-bento-surface-lighter text-bento-text-primary focus:outline-none focus:border-bento-accent"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowNewPw(!showNewPw)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-bento-text-secondary hover:text-bento-text-primary focus:outline-none"
+                    >
+                      {showNewPw ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                    </button>
+                  </div>
                 </div>
 
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-bento-text-secondary">Konfirmasi Password Baru</label>
-                  <input
-                    type="password"
-                    required
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    placeholder="Ulangi password baru"
-                    className="w-full px-4 py-2.5 text-xs rounded-xl border border-bento-border bg-bento-surface-lighter text-bento-text-primary focus:outline-none focus:border-bento-accent"
-                  />
+                  <div className="relative">
+                    <input
+                      type={showConfirmPw ? "text" : "password"}
+                      required
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      placeholder="Ulangi password baru"
+                      className="w-full pl-4 pr-10 py-2.5 text-xs rounded-xl border border-bento-border bg-bento-surface-lighter text-bento-text-primary focus:outline-none focus:border-bento-accent"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPw(!showConfirmPw)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-bento-text-secondary hover:text-bento-text-primary focus:outline-none"
+                    >
+                      {showConfirmPw ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -375,44 +441,74 @@ export default function SettingsTab({ lang, setLang, theme, setTheme, adminEmail
                 </div>
               )}
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold uppercase tracking-wider text-bento-text-secondary">Provider AI</label>
-                  <select
-                    value={provider}
-                    onChange={(e) => setProvider(e.target.value)}
-                    className="w-full px-3 py-2 text-xs rounded-lg border border-bento-border bg-bento-surface text-bento-text-primary focus:outline-none"
-                  >
-                    <option value="gemini">Google Gemini (Free Tier: OCR, Scan Wajah, DLL)</option>
-                    <option value="claude">Anthropic Claude (Reasoning & Chat Widget - Cadangan)</option>
-                    <option value="gpt">OpenAI GPT (Reasoning & Chat Widget)</option>
-                    <option value="grok">x.ai Grok (Technical Team: Grok-4.5 & Imagine)</option>
-                    <option value="deepseek">Deepseek AI (Reasoning & Chat)</option>
-                  </select>
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-bento-text-secondary">Provider AI</label>
+                    <select
+                      value={provider}
+                      onChange={(e) => setProvider(e.target.value)}
+                      className="w-full px-3 py-2 text-xs rounded-lg border border-bento-border bg-bento-surface text-bento-text-primary focus:outline-none"
+                    >
+                      <option value="gemini">Google Gemini (Free Tier: OCR, Scan Wajah, DLL)</option>
+                      <option value="claude">Anthropic Claude (Reasoning & Chat Widget - Cadangan)</option>
+                      <option value="gpt">OpenAI GPT (Reasoning & Chat Widget)</option>
+                      <option value="grok">x.ai Grok (Technical Team: Grok-4.5 & Imagine)</option>
+                      <option value="deepseek">Deepseek AI (Reasoning & Chat)</option>
+                      <option value="others">Others (GLM, Llama, DLL - Tier 2)</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-bento-text-secondary">Label Identitas (Opsional)</label>
+                    <input
+                      type="text"
+                      placeholder="Contoh: Key Utama Produksi"
+                      value={label}
+                      onChange={(e) => setLabel(e.target.value)}
+                      className="w-full px-3 py-2 text-xs rounded-lg border border-bento-border bg-bento-surface text-bento-text-primary focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-bento-text-secondary">Kunci API (API Key)</label>
+                    <input
+                      type="password"
+                      placeholder="AIzaSy... / sk-..."
+                      required
+                      value={apiKey}
+                      onChange={(e) => setApiKey(e.target.value)}
+                      className="w-full px-3 py-2 text-xs rounded-lg border border-bento-border bg-bento-surface text-bento-text-primary focus:outline-none"
+                    />
+                  </div>
                 </div>
 
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold uppercase tracking-wider text-bento-text-secondary">Label Identitas (Opsional)</label>
-                  <input
-                    type="text"
-                    placeholder="Contoh: Key Utama Produksi"
-                    value={label}
-                    onChange={(e) => setLabel(e.target.value)}
-                    className="w-full px-3 py-2 text-xs rounded-lg border border-bento-border bg-bento-surface text-bento-text-primary focus:outline-none"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold uppercase tracking-wider text-bento-text-secondary">Kunci API (API Key)</label>
-                  <input
-                    type="password"
-                    placeholder="AIzaSy... / sk-..."
-                    required
-                    value={apiKey}
-                    onChange={(e) => setApiKey(e.target.value)}
-                    className="w-full px-3 py-2 text-xs rounded-lg border border-bento-border bg-bento-surface text-bento-text-primary focus:outline-none"
-                  />
-                </div>
+                {provider === "others" && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-3 rounded-xl bg-bento-surface border border-bento-border animate-fade-in">
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold uppercase tracking-wider text-bento-text-secondary">Base URL API Gateway</label>
+                      <input
+                        type="url"
+                        placeholder="https://openrouter.ai/api/v1"
+                        required
+                        value={baseUrl}
+                        onChange={(e) => setBaseUrl(e.target.value)}
+                        className="w-full px-3 py-2 text-xs rounded-lg border border-bento-border bg-bento-surface-lighter text-bento-text-primary focus:outline-none focus:border-bento-accent"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold uppercase tracking-wider text-bento-text-secondary">Model Name (Target Pool)</label>
+                      <input
+                        type="text"
+                        placeholder="google/gemini-2.5-flash / glm-4 / dll"
+                        required
+                        value={modelName}
+                        onChange={(e) => setModelName(e.target.value)}
+                        className="w-full px-3 py-2 text-xs rounded-lg border border-bento-border bg-bento-surface-lighter text-bento-text-primary focus:outline-none focus:border-bento-accent"
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="flex justify-end pt-2">
@@ -428,9 +524,21 @@ export default function SettingsTab({ lang, setLang, theme, setTheme, adminEmail
 
             {/* Keys list */}
             <div className="space-y-3">
-              <h5 className="text-xs font-bold tracking-wider uppercase opacity-85 text-bento-text-primary">
-                Daftar Kunci Aktif ({providerKeys.length})
-              </h5>
+              <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
+                <h5 className="text-xs font-bold tracking-wider uppercase opacity-85 text-bento-text-primary">
+                  Daftar Kunci Aktif ({providerKeys.length})
+                </h5>
+                {providerKeys.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleTestAllConnections}
+                    disabled={testingAll || keysLoading}
+                    className="px-3 py-1.5 text-[10px] font-extrabold rounded-lg bg-bento-accent/15 border border-bento-accent/20 text-bento-accent hover:bg-bento-accent hover:text-white transition-all disabled:opacity-50 flex items-center gap-1"
+                  >
+                    {testingAll ? "Menguji Semua..." : "Uji Semua Koneksi"}
+                  </button>
+                )}
+              </div>
 
               {keysLoading ? (
                 <p className="text-xs text-bento-text-secondary italic">Memuat kunci...</p>
@@ -496,6 +604,13 @@ export default function SettingsTab({ lang, setLang, theme, setTheme, adminEmail
                             </span>
                           )}
                         </div>
+                        
+                        {k.provider === 'others' && (
+                          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px] text-bento-text-secondary mt-1 bg-bento-surface px-2.5 py-1 rounded-lg border border-bento-border/50 w-fit">
+                            <span>Base URL: <strong className="text-bento-text-primary font-mono select-all">{k.base_url || "-"}</strong></span>
+                            <span>Model: <strong className="text-bento-text-primary font-mono select-all">{k.model_name || "-"}</strong></span>
+                          </div>
+                        )}
                       </div>
 
                       <div className="flex items-center gap-2.5 self-end md:self-auto">

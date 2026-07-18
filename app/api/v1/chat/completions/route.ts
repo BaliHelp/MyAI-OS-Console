@@ -370,7 +370,7 @@ ${prompt}`;
       // Fetch active keys for providers in this tier
       const { data: dbKeys, error: dbKeysError } = await supabaseAdmin
         .from("gw_provider_keys")
-        .select("id, provider, key_encrypted, usage_count, last_used_at, label, priority, cooldown_until, consecutive_429_count")
+        .select("id, provider, key_encrypted, usage_count, last_used_at, label, priority, cooldown_until, consecutive_429_count, base_url, model_name")
         .in("provider", providersInTier)
         .eq("status", "active");
 
@@ -439,6 +439,8 @@ ${prompt}`;
         priority: number;
         lastUsedAt: string | null;
         consecutive429Count: number;
+        base_url?: string | null;
+        model_name?: string | null;
       }
 
       const candidates: CandidateKey[] = [];
@@ -460,7 +462,9 @@ ${prompt}`;
               usageCount: k.usage_count ?? 0,
               priority: k.priority ?? 0,
               lastUsedAt: k.last_used_at,
-              consecutive429Count: k.consecutive_429_count ?? 0
+              consecutive429Count: k.consecutive_429_count ?? 0,
+              base_url: k.base_url,
+              model_name: k.model_name
             });
           }
         } catch (err) {
@@ -495,7 +499,18 @@ ${prompt}`;
         providerUsed = candidate.provider;
         const providerApiKey = candidate.key;
 
-        const resCall = await attemptCall(candidate.provider, providerApiKey, prompt, systemPrompt, body, selectedKeyId, selectedKeyLabel, parsedFile);
+        const resCall = await attemptCall(
+          candidate.provider,
+          providerApiKey,
+          prompt,
+          systemPrompt,
+          body,
+          selectedKeyId,
+          selectedKeyLabel,
+          parsedFile,
+          candidate.base_url,
+          candidate.model_name
+        );
         if (resCall.success) {
           aiResponseText = resCall.aiResponseText;
           promptTokens = resCall.promptTokens;
@@ -668,7 +683,9 @@ export async function attemptCall(
   body: any,
   selectedKeyId: string | null,
   selectedKeyLabel: string,
-  parsedFile?: { mimeType: string; base64Data: string } | null
+  parsedFile?: { mimeType: string; base64Data: string } | null,
+  baseUrl?: string | null,
+  modelNameOverride?: string | null
 ) {
   const adapter = PROVIDER_REGISTRY[provider];
   if (!adapter) {
@@ -682,7 +699,8 @@ export async function attemptCall(
     {
       temperature: body.temperature,
       max_tokens: body.max_tokens,
-      model_name: body.model_name,
+      model_name: modelNameOverride || body.model_name,
+      base_url: baseUrl,
     },
     parsedFile ?? null,
     selectedKeyId,

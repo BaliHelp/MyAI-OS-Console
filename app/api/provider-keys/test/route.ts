@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
     // 1. Fetch key from DB
     const { data: keyData, error: fetchError } = await supabaseAdmin
       .from("gw_provider_keys")
-      .select("key_encrypted, provider")
+      .select("key_encrypted, provider, base_url")
       .eq("id", id)
       .single();
 
@@ -101,6 +101,31 @@ export async function POST(req: NextRequest) {
       if (res.status === 200) {
         connected = true;
         details = "Koneksi sukses (Deepseek API)";
+      } else {
+        const json = await res.json().catch(() => ({}));
+        details = `Gagal: ${json.error?.message || `HTTP ${res.status}`}`;
+      }
+    } else if (provider === "others" || provider === "custom_openai") {
+      let testUrl = (keyData as any).base_url || "https://openrouter.ai/api/v1";
+      if (testUrl.endsWith("/chat/completions")) {
+        testUrl = testUrl.replace("/chat/completions", "/models");
+      } else {
+        if (testUrl.endsWith("/")) {
+          testUrl += "models";
+        } else {
+          testUrl += "/models";
+        }
+      }
+      const res = await fetch(testUrl, {
+        headers: { 
+          "Authorization": `Bearer ${rawKey}`,
+          "HTTP-Referer": "https://console.myai.bali.technology",
+          "X-Title": "MyAI OS Console Gateway"
+        }
+      });
+      if (res.status === 200) {
+        connected = true;
+        details = "Koneksi sukses (Custom OpenAI API)";
       } else {
         const json = await res.json().catch(() => ({}));
         details = `Gagal: ${json.error?.message || `HTTP ${res.status}`}`;

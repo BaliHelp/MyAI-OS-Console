@@ -11,7 +11,7 @@ export async function GET(req: NextRequest) {
     // 1. Fetch all keys from DB sorted by label and created_at ascending
     const { data: keys, error: fetchError } = await supabaseAdmin
       .from("gw_provider_keys")
-      .select("id, provider, label, key_encrypted, status")
+      .select("id, provider, label, key_encrypted, status, base_url")
       .eq("status", "active")
       .order("label", { ascending: true })
       .order("created_at", { ascending: true });
@@ -86,6 +86,31 @@ export async function GET(req: NextRequest) {
           } else if (k.provider === "deepseek") {
             const res = await fetch("https://api.deepseek.com/models", {
               headers: { "Authorization": `Bearer ${rawKey}` },
+              signal: AbortSignal.timeout(5000)
+            });
+            if (res.status === 200) {
+              connected = true;
+              details = "OK";
+            } else {
+              details = `HTTP ${res.status}`;
+            }
+          } else if (k.provider === "others" || k.provider === "custom_openai") {
+            let testUrl = (k as any).base_url || "https://openrouter.ai/api/v1";
+            if (testUrl.endsWith("/chat/completions")) {
+              testUrl = testUrl.replace("/chat/completions", "/models");
+            } else {
+              if (testUrl.endsWith("/")) {
+                testUrl += "models";
+              } else {
+                testUrl += "/models";
+              }
+            }
+            const res = await fetch(testUrl, {
+              headers: { 
+                "Authorization": `Bearer ${rawKey}`,
+                "HTTP-Referer": "https://console.myai.bali.technology",
+                "X-Title": "MyAI OS Console Gateway"
+              },
               signal: AbortSignal.timeout(5000)
             });
             if (res.status === 200) {

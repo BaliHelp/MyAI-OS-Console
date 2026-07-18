@@ -23,7 +23,7 @@ export interface ProviderAdapter {
     providerApiKey: string,
     prompt: string,
     systemPrompt: string,
-    options: { temperature?: number; max_tokens?: number; model_name?: string },
+    options: { temperature?: number; max_tokens?: number; model_name?: string; base_url?: string | null },
     fileData?: FileData | null,
     selectedKeyId?: string | null,
     selectedKeyLabel?: string

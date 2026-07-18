@@ -13,9 +13,9 @@ import RoutingTab from "@/components/RoutingTab";
 import SpecsTab from "@/components/SpecsTab";
 import DataCenterTab from "@/components/DataCenterTab";
 import PersonasTab from "@/components/PersonasTab";
-import CostsTab from "@/components/CostsTab";
-import AuditLogTab from "@/components/AuditLogTab";
-import HealthTab from "@/components/HealthTab";
+import CostsTab from "./CostsTab";
+import AuditLogTab from "./AuditLogTab";
+import HealthTab from "./HealthTab";
 
 interface DashboardProps {
   adminEmail: string;
@@ -55,8 +55,8 @@ export default function Dashboard({ adminEmail }: DashboardProps) {
 
   useEffect(() => { localStorage.setItem("myai_lang", lang); }, [lang]);
 
-  const fetchAllData = useCallback(async () => {
-    setLoading(true);
+  const fetchAllData = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const [appsRes, keysRes, logsRes, profileRes, docsRes] = await Promise.all([
         fetch("/api/apps").then((r) => r.json()),
@@ -73,7 +73,7 @@ export default function Dashboard({ adminEmail }: DashboardProps) {
     } catch (e) {
       console.error("Error loading data", e);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, []);
 
@@ -88,7 +88,7 @@ export default function Dashboard({ adminEmail }: DashboardProps) {
       body: JSON.stringify({ name, slug, tier }),
     });
     if (!res.ok) { const e = await res.json(); throw new Error(e.error); }
-    await fetchAllData();
+    await fetchAllData(true);
   };
 
   const handleGenerateKey = async (clientAppId: string, scope: string[], rateLimit: number | null) => {
@@ -99,14 +99,14 @@ export default function Dashboard({ adminEmail }: DashboardProps) {
     });
     if (!res.ok) { const e = await res.json(); throw new Error(e.error); }
     const result = await res.json();
-    await fetchAllData();
+    await fetchAllData(true);
     return result;
   };
 
   const handleRevokeKey = async (keyId: string) => {
     const res = await fetch(`/api/keys/${keyId}/revoke`, { method: "POST" });
     if (!res.ok) throw new Error("Failed to revoke key");
-    await fetchAllData();
+    await fetchAllData(true);
   };
 
   const handleSaveProfile = async (content: string) => {
@@ -127,7 +127,7 @@ export default function Dashboard({ adminEmail }: DashboardProps) {
       body: JSON.stringify({ title, content, client_app_id: clientAppId }),
     });
     if (!res.ok) throw new Error("Failed to add document");
-    await fetchAllData();
+    await fetchAllData(true);
   };
 
   const handleEditDocument = async (id: string, title: string, content: string, clientAppId: string | null) => {
@@ -137,13 +137,13 @@ export default function Dashboard({ adminEmail }: DashboardProps) {
       body: JSON.stringify({ title, content, client_app_id: clientAppId }),
     });
     if (!res.ok) throw new Error("Failed to update document");
-    await fetchAllData();
+    await fetchAllData(true);
   };
 
   const handleDeleteDocument = async (id: string) => {
     const res = await fetch(`/api/documents/${id}`, { method: "DELETE" });
     if (!res.ok) throw new Error("Failed to delete document");
-    await fetchAllData();
+    await fetchAllData(true);
   };
 
   if (loading || !businessProfile) {
@@ -216,7 +216,7 @@ export default function Dashboard({ adminEmail }: DashboardProps) {
               <UsageTab apps={apps} logs={logs} lang={lang} theme={theme} />
             )}
             {activeTab === 'costs' && (
-              <CostsTab logs={logs} lang={lang} theme={theme} />
+              <CostsTab logs={logs} lang={lang} theme={theme} onRefreshLogs={fetchAllData} />
             )}
             {activeTab === 'datacenter' && (
               <DataCenterTab lang={lang} theme={theme} />
