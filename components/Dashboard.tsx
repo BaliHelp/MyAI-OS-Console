@@ -18,6 +18,7 @@ import AuditLogTab from "./AuditLogTab";
 import HealthTab from "./HealthTab";
 import ThreeDLoader from "./ThreeDLoader";
 import GlobalLoader from "./GlobalLoader";
+import MyAIChatWidget from "./MyAIChatWidget";
 
 interface DashboardProps {
   adminEmail: string;
@@ -264,6 +265,14 @@ export default function Dashboard({ adminEmail }: DashboardProps) {
         </main>
       </div>
       <GlobalLoader loading={globalLoading} />
+      {/* MyAI Master Chat Widget — persistent across all tabs */}
+      <MyAIChatWidget
+        apps={apps}
+        logs={logs}
+        apiKeys={apiKeys}
+        documents={documents}
+        businessProfile={businessProfile}
+      />
     </div>
   );
 }

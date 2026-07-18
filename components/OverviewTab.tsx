@@ -454,7 +454,8 @@ export default function OverviewTab({ apps, apiKeys, logs, lang, theme }: Overvi
           </div>
         </div>
 
-        {/* Card 3: Active Applications & Keys (Stat 2) - Span 4 */}
+        {/* Card 3: Total Aplikasi — Real list dari Apps Tab */}
+        {appActivityStats.totalCount > 0 && (
         <div className="col-span-1 md:col-span-6 lg:col-span-4 p-6 rounded-2xl border border-bento-border bg-bento-surface flex flex-col justify-between transition-all duration-300">
           <div>
             <div className="flex items-center justify-between">
@@ -465,9 +466,13 @@ export default function OverviewTab({ apps, apiKeys, logs, lang, theme }: Overvi
             </div>
             <div className="mt-4">
               <span className="text-3xl font-extrabold tracking-tight text-bento-text-primary" id="stat-total-apps">
-                {appActivityStats.activeCount} <span className="text-sm font-normal text-bento-text-secondary">aktif dari {appActivityStats.totalCount}</span>
+                {appActivityStats.totalCount}
               </span>
+              <span className="text-sm font-normal text-bento-text-secondary ml-2">aplikasi terdaftar</span>
               <div className="mt-2 space-y-1.5">
+                <p className="text-[11px] text-bento-text-secondary font-medium">
+                  {appActivityStats.activeCount} aktif dalam 7 hari terakhir
+                </p>
                 <p className="text-[11px] text-bento-text-secondary font-medium">
                   {activeKeys} / {apiKeys.length} client API key aktif
                 </p>
@@ -480,63 +485,72 @@ export default function OverviewTab({ apps, apiKeys, logs, lang, theme }: Overvi
             </div>
           </div>
 
+          {/* Real list of all apps */}
           <div className="mt-4 border-t border-bento-border/50 pt-3">
             <button
               type="button"
               onClick={() => setAppsListExpanded(!appsListExpanded)}
-              className="text-[10px] font-bold text-bento-accent hover:underline flex items-center justify-between w-full focus:outline-none"
+              className="text-[10px] font-bold text-bento-accent hover:underline flex items-center justify-between w-full focus:outline-none mb-2"
             >
-              <span>{appsListExpanded ? "Sembunyikan Status" : "Lihat Status Aplikasi"}</span>
+              <span>{appsListExpanded ? "Sembunyikan Daftar" : "Lihat Semua Aplikasi"}</span>
               <span className="text-xs">{appsListExpanded ? "▲" : "▼"}</span>
             </button>
-            {appsListExpanded && (
-              <div className="mt-2.5 max-h-[120px] overflow-y-auto pr-1 space-y-2 animate-fade-in">
-                {appActivityStats.list.length === 0 ? (
-                  <p className="text-[10px] text-bento-text-secondary italic">Belum ada aplikasi terdaftar.</p>
-                ) : (
-                  appActivityStats.list.map(app => (
-                    <div key={app.id} className="flex items-center justify-between text-[11px] py-0.5">
-                      <span className="font-semibold text-bento-text-primary truncate max-w-[150px]">{app.name}</span>
-                      <span className={`px-2 py-0.5 rounded text-[8px] font-extrabold uppercase ${
-                        app.isActive 
-                          ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/15' 
-                          : 'bg-gray-500/10 text-gray-400 border border-gray-500/15'
-                      }`}>
-                        {app.isActive ? "Aktif" : "Belum Ada Aktivitas"}
-                      </span>
+            <div className={`space-y-1.5 overflow-y-auto pr-1 transition-all duration-300 ${appsListExpanded ? 'max-h-[200px]' : 'max-h-[80px] overflow-hidden'}`}>
+              {appActivityStats.list.length === 0 ? (
+                <p className="text-[10px] text-bento-text-secondary italic">Belum ada aplikasi terdaftar.</p>
+              ) : (
+                appActivityStats.list.map(app => (
+                  <div key={app.id} className="flex items-center justify-between text-[11px] py-1 px-2 rounded-lg bg-bento-surface-lighter border border-bento-border/50">
+                    <div className="flex items-center gap-2">
+                      <AppWindow className="h-3 w-3 text-bento-text-secondary shrink-0" />
+                      <span className="font-semibold text-bento-text-primary truncate max-w-[140px]">{app.name}</span>
                     </div>
-                  ))
-                )}
-              </div>
-            )}
+                    <span className={`px-2 py-0.5 rounded text-[8px] font-extrabold uppercase ${
+                      app.isActive 
+                        ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/15' 
+                        : 'bg-gray-500/10 text-gray-400 border border-gray-500/15'
+                    }`}>
+                      {app.isActive ? "AKTIF" : "IDLE"}
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
           </div>
         </div>
+        )}
 
-        {/* Card 4: Est Cost (Stat 3) - Span 4 with quick tabs */}
-        <div className="col-span-1 md:col-span-6 lg:col-span-4 p-6 rounded-2xl border border-bento-border bg-bento-surface flex flex-col justify-between">
+        {/* Card 4: Estimasi Biaya — fixed layout with tabs at top, total, then breakdown */}
+        <div className="col-span-1 md:col-span-6 lg:col-span-4 p-6 rounded-2xl border border-bento-border bg-bento-surface flex flex-col gap-3">
+          {/* Header Row */}
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-bento-text-secondary uppercase tracking-wider">{t.cardEstCost}</span>
             <div className="p-2 rounded-xl bg-bento-success/10 text-bento-success">
               <DollarSign className="h-5 w-5" />
             </div>
           </div>
-          {/* Quick tabs */}
-          <div className="flex gap-1 mt-3">
+
+          {/* Tab Switcher — Harian | 1 Bulan | Semua */}
+          <div className="flex gap-1 bg-bento-surface-lighter border border-bento-border p-0.5 rounded-xl w-fit">
             {([['today','Harian'], ['30d','1 Bulan'], ['all','Semua']] as const).map(([val, label]) => (
               <button
                 key={val}
                 onClick={() => setCostQuickTab(val)}
-                className={`px-2 py-0.5 rounded-lg text-[9px] font-bold transition-all ${
-                  costQuickTab === val ? 'bg-bento-success text-white' : 'text-bento-text-secondary hover:text-bento-text-primary'
+                className={`px-3 py-1 rounded-lg text-[10px] font-bold transition-all ${
+                  costQuickTab === val
+                    ? 'bg-bento-success text-white shadow-sm'
+                    : 'text-bento-text-secondary hover:text-bento-text-primary'
                 }`}
               >
                 {label}
               </button>
             ))}
           </div>
-          <div className="mt-2">
+
+          {/* Main Cost Value */}
+          <div>
             <span className="text-3xl font-extrabold tracking-tight text-bento-text-primary" id="stat-est-cost">${estimatedCost.mainValue}</span>
-            <div className="mt-1 space-y-0.5">
+            <div className="mt-0.5 space-y-0.5">
               <p className="text-[11px] text-bento-text-secondary font-medium">
                 USD • {estimatedCost.mainCount} panggilan
               </p>
@@ -547,6 +561,37 @@ export default function OverviewTab({ apps, apiKeys, logs, lang, theme }: Overvi
               )}
             </div>
           </div>
+
+          {/* Per-Provider Cost Breakdown */}
+          {providerBreakdown.list.length > 0 && (
+            <div className="border-t border-bento-border/50 pt-2 space-y-1.5">
+              <span className="text-[9px] font-bold text-bento-text-secondary uppercase tracking-wider">Rincian Per Provider</span>
+              {providerBreakdown.list.map(item => {
+                const COSTS: Record<string, number> = { gemini: 0.075, gpt: 0.15, claude: 3.00, grok: 2.0, deepseek: 0.14 };
+                const costRate = COSTS[item.provider] ?? 1.0;
+                const barColor = item.provider === 'claude'
+                  ? 'bg-[#E879F9]'
+                  : item.provider === 'gpt'
+                    ? 'bg-bento-success'
+                    : item.provider === 'gemini'
+                      ? 'bg-bento-accent'
+                      : item.provider === 'grok'
+                        ? 'bg-amber-400'
+                        : 'bg-sky-400';
+                return (
+                  <div key={item.provider} className="space-y-0.5">
+                    <div className="flex items-center justify-between text-[10px]">
+                      <span className="font-bold text-bento-text-primary">{item.displayName}</span>
+                      <span className="text-bento-text-secondary font-mono">{item.count}x · ${(item.count * costRate / 1000).toFixed(4)}</span>
+                    </div>
+                    <div className="w-full h-1 rounded-full bg-bento-surface-lighter overflow-hidden border border-bento-border/30">
+                      <div className={`h-full ${barColor}`} style={{ width: `${item.percent}%` }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* Real Time API Connection Card - Span 4 */}
@@ -684,39 +729,58 @@ export default function OverviewTab({ apps, apiKeys, logs, lang, theme }: Overvi
           </div>
         </div>
 
-        {/* Card 6: Application Health - Span 6 */}
-        <div className="col-span-1 md:col-span-12 lg:col-span-6 p-6 rounded-2xl border border-bento-border bg-bento-surface flex flex-col justify-between" id="app-health-container">
-          <div>
-            <div className="mb-4">
+        {/* Card 6: Application Network Health - Span 6 — Real-time API Key check */}
+        <div className="col-span-1 md:col-span-12 lg:col-span-6 p-6 rounded-2xl border border-bento-border bg-bento-surface flex flex-col" id="app-health-container">
+          <div className="mb-4 flex items-start justify-between">
+            <div>
               <h4 className="font-bold text-base tracking-tight mb-1 text-bento-text-primary">Application Network Health</h4>
-              <p className="text-xs text-bento-text-secondary">Interactive monitoring of apps and their Gateway endpoints</p>
+              <p className="text-xs text-bento-text-secondary">Status koneksi real-time berdasarkan API key aktif</p>
             </div>
+            <span className="text-[9px] font-bold text-bento-success bg-bento-success/10 border border-bento-success/20 px-2 py-0.5 rounded-full flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-bento-success animate-ping" />
+              Live
+            </span>
+          </div>
 
-            <div className="space-y-3">
-              {apps.length === 0 ? (
-                <div className="text-center py-6 text-xs text-bento-text-secondary">
-                  No applications added yet. Go to Apps tab to register.
-                </div>
-              ) : (
-                apps.map(app => (
+          <div className="space-y-3 flex-1">
+            {apps.length === 0 ? (
+              <div className="text-center py-6 text-xs text-bento-text-secondary opacity-60">
+                Belum ada aplikasi. Tambah di tab Apps.
+              </div>
+            ) : (
+              apps.map(app => {
+                // Real check: does this app have at least 1 active API key?
+                const appKeys = apiKeys.filter(k => k.client_app_id === app.id && k.status === 'active');
+                const isConnected = appKeys.length > 0;
+                const keyCount = appKeys.length;
+                return (
                   <div key={app.id} className="flex items-center justify-between p-3.5 rounded-xl bg-bento-surface-lighter border border-bento-border hover:scale-[1.01] transition-transform">
                     <div className="flex items-center gap-3">
-                      <div className="p-2.5 rounded-xl bg-bento-accent-muted text-bento-accent">
+                      <div className={`p-2.5 rounded-xl ${isConnected ? 'bg-bento-accent-muted text-bento-accent' : 'bg-gray-500/10 text-gray-500'}`}>
                         <AppWindow className="h-4 w-4" />
                       </div>
                       <div>
                         <h5 className="font-bold text-xs text-bento-text-primary">{app.name}</h5>
-                        <p className="text-[10px] text-bento-text-secondary font-medium uppercase tracking-wider mt-0.5">{app.tier || 'Standard'} Tier</p>
+                        <p className="text-[10px] text-bento-text-secondary font-medium uppercase tracking-wider mt-0.5">
+                          {app.tier || 'Standard'} Tier • {keyCount} key{keyCount !== 1 ? 's' : ''}
+                        </p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 bg-bento-success/5 border border-bento-success/10 px-2.5 py-1 rounded-lg">
-                      <span className="w-1.5 h-1.5 rounded-full bg-bento-success animate-pulse" />
-                      <span className="text-[10px] text-bento-success font-bold uppercase tracking-wider">Active</span>
-                    </div>
+                    {isConnected ? (
+                      <div className="flex items-center gap-2 bg-bento-success/5 border border-bento-success/10 px-2.5 py-1 rounded-lg">
+                        <span className="w-1.5 h-1.5 rounded-full bg-bento-success animate-pulse" />
+                        <span className="text-[10px] text-bento-success font-bold uppercase tracking-wider">Active</span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 bg-gray-500/5 border border-gray-500/10 px-2.5 py-1 rounded-lg">
+                        <span className="w-1.5 h-1.5 rounded-full bg-gray-500" />
+                        <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">No Key</span>
+                      </div>
+                    )}
                   </div>
-                ))
-              )}
-            </div>
+                );
+              })
+            )}
           </div>
         </div>
 

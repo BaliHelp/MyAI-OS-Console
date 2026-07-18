@@ -3,7 +3,8 @@
 import { useState, useEffect, useMemo } from "react";
 import {
   Database, Filter, Search, ShieldAlert, FileText, Upload, Plus, ExternalLink,
-  Calendar, FileCheck, CheckCircle, X, Download, ChevronDown, ChevronRight, Eye
+  Calendar, FileCheck, CheckCircle, X, Download, ChevronDown, ChevronRight, Eye,
+  ScanLine, Camera, Loader2
 } from "lucide-react";
 import { ClientApp, Language } from "@/lib/types";
 
@@ -106,6 +107,16 @@ export default function DataCenterTab({ lang, theme }: DataCenterTabProps) {
   const [formFileMime, setFormFileMime] = useState<string | null>(null);
   const [formFileName, setFormFileName] = useState("");
 
+  // OCR Scan state
+  const [showOcrScan, setShowOcrScan] = useState(false);
+  const [ocrFile, setOcrFile] = useState<string | null>(null);
+  const [ocrFileMime, setOcrFileMime] = useState<string | null>(null);
+  const [ocrFileName, setOcrFileName] = useState("");
+  const [ocrDocType, setOcrDocType] = useState("passport");
+  const [ocrScanning, setOcrScanning] = useState(false);
+  const [ocrResult, setOcrResult] = useState<any>(null);
+  const [ocrError, setOcrError] = useState<string | null>(null);
+
   const loadData = async () => {
     setLoading(true);
     try {
@@ -158,6 +169,47 @@ export default function DataCenterTab({ lang, theme }: DataCenterTabProps) {
       alert(`Error: ${err.message}`);
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  // OCR Scan handler
+  const handleOcrFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setOcrFileName(file.name);
+    setOcrFileMime(file.type);
+    setOcrResult(null);
+    setOcrError(null);
+    const reader = new FileReader();
+    reader.onload = () => setOcrFile(reader.result as string);
+    reader.readAsDataURL(file);
+  };
+
+  const handleOcrScan = async () => {
+    if (!ocrFile) return;
+    setOcrScanning(true);
+    setOcrResult(null);
+    setOcrError(null);
+    try {
+      const res = await fetch("/api/data-center/ocr-scan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          file: ocrFile,
+          fileMimeType: ocrFileMime,
+          documentType: ocrDocType,
+          tags: [ocrDocType, "ocr_scan"],
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "OCR gagal");
+      setOcrResult(data.ocr_result);
+      // Refresh data
+      loadData();
+    } catch (err: any) {
+      setOcrError(err.message);
+    } finally {
+      setOcrScanning(false);
     }
   };
 
@@ -221,14 +273,106 @@ export default function DataCenterTab({ lang, theme }: DataCenterTabProps) {
             Repositori data persisten — {records.length} record dari {groups.length} grup klien/field
           </p>
         </div>
-        <button
-          onClick={() => setShowAddForm(!showAddForm)}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-bento-accent text-white font-semibold text-sm hover:bg-bento-accent/90 transition-colors shadow-sm self-start"
-        >
-          <Plus className="h-4 w-4" />
-          {lang === 'id' ? 'Tambah Dokumen Manual' : 'Add Manual Document'}
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => { setShowOcrScan(!showOcrScan); setShowAddForm(false); }}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-500 text-white font-semibold text-sm hover:bg-emerald-600 transition-colors shadow-sm self-start"
+          >
+            <ScanLine className="h-4 w-4" />
+            OCR Scan
+          </button>
+          <button
+            onClick={() => { setShowAddForm(!showAddForm); setShowOcrScan(false); }}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-bento-accent text-white font-semibold text-sm hover:bg-bento-accent/90 transition-colors shadow-sm self-start"
+          >
+            <Plus className="h-4 w-4" />
+            {lang === 'id' ? 'Tambah Dokumen Manual' : 'Add Manual Document'}
+          </button>
+        </div>
       </div>
+
+      {/* OCR Scan Panel */}
+      {showOcrScan && (
+        <div className="p-6 rounded-2xl border border-emerald-500/20 bg-emerald-500/5 shadow-xl">
+          <h3 className="text-base font-bold text-bento-text-primary mb-4 flex items-center gap-2">
+            <ScanLine className="h-5 w-5 text-emerald-400" />
+            OCR Scan Dokumen
+            <span className="text-[10px] font-normal text-bento-text-secondary ml-2">Powered by Gemini Vision + Training Data</span>
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-bento-text-secondary uppercase tracking-wider mb-2">Tipe Dokumen</label>
+              <select
+                value={ocrDocType}
+                onChange={e => setOcrDocType(e.target.value)}
+                className="w-full px-3 py-2.5 rounded-xl border border-bento-border bg-bento-surface-lighter text-sm text-bento-text-primary focus:border-emerald-500 outline-none"
+              >
+                <option value="passport">Passport</option>
+                <option value="visa">Visa</option>
+                <option value="bank_statement">Bank Statement</option>
+                <option value="flight_ticket">Flight Ticket</option>
+                <option value="cv">Curriculum Vitae / CV</option>
+                <option value="itinerary">Itinerary</option>
+                <option value="contract">Letter of Contract</option>
+                <option value="accommodation">Proof of Accommodation</option>
+                <option value="photo">Recent Photo</option>
+                <option value="stay_permit">Stay Permit (KITAS/KITAP)</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-bento-text-secondary uppercase tracking-wider mb-2">Upload File</label>
+              <label className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-dashed border-emerald-500/40 hover:bg-bento-surface-lighter transition-colors cursor-pointer text-sm font-semibold text-bento-text-primary">
+                <Camera className="h-4 w-4 text-emerald-400" />
+                <span>{ocrFileName || 'Pilih gambar/PDF...'}</span>
+                <input type="file" onChange={handleOcrFileChange} className="hidden" accept="image/*,application/pdf" />
+              </label>
+            </div>
+          </div>
+
+          {ocrFile && (
+            <div className="mt-4 flex items-center gap-3">
+              <button
+                onClick={handleOcrScan}
+                disabled={ocrScanning}
+                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-500 text-white font-bold text-sm hover:bg-emerald-600 transition-colors disabled:opacity-50"
+              >
+                {ocrScanning ? (
+                  <><Loader2 className="h-4 w-4 animate-spin" /> Scanning...</>
+                ) : (
+                  <><ScanLine className="h-4 w-4" /> Mulai Scan OCR</>
+                )}
+              </button>
+              {ocrScanning && (
+                <span className="text-xs text-emerald-400 font-semibold animate-pulse">Gemini Vision menganalisis dokumen...</span>
+              )}
+            </div>
+          )}
+
+          {ocrError && (
+            <div className="mt-4 p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-xs text-red-400 font-semibold">
+              ❌ {ocrError}
+            </div>
+          )}
+
+          {ocrResult && (
+            <div className="mt-4 p-4 rounded-xl bg-bento-surface border border-emerald-500/20">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
+                  <CheckCircle className="h-4 w-4" /> Scan Berhasil! Tersimpan ke Data Center
+                </span>
+                <span className="text-[10px] text-bento-text-secondary">
+                  Confidence: {((ocrResult.confidence_score || 0) * 100).toFixed(0)}%
+                </span>
+              </div>
+              {ocrResult.extracted_data?.extracted_fields && (
+                <pre className="text-[10px] font-mono bg-bento-surface-lighter rounded-xl p-3 overflow-x-auto text-bento-text-primary max-h-48">
+                  {JSON.stringify(ocrResult.extracted_data.extracted_fields, null, 2)}
+                </pre>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Add Form */}
       {showAddForm && (
