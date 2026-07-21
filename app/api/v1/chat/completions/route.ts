@@ -419,6 +419,7 @@ ${prompt}`;
             success = true;
             break tierOuterLoop;
           } else {
+            // 400 = fatal bad-request; 402/429 = retriable (credit or rate-limit) — continue
             if (resCall.status === 400) {
               return NextResponse.json({ error: resCall.errorMsg }, { status: 400 });
             }
@@ -531,23 +532,26 @@ ${prompt}`;
           break tierOuterLoop;
         } else {
           if (resCall.status === 400) {
+            // True bad-request (invalid params) — fatal, don't retry other tiers.
             return NextResponse.json({ error: resCall.errorMsg }, { status: 400 });
           }
 
-          // Handle 429 Cooldown (Exponential backoff)
-          if (resCall.status === 429 && selectedKeyId && supabaseAdmin) {
+          // 429 (rate-limit) or 402 (credit/billing exhausted) — set cooldown, continue to next tier
+          if ((resCall.status === 429 || resCall.status === 402) && selectedKeyId && supabaseAdmin) {
             const consecutive = candidate.consecutive429Count;
-            const duration = 60 * Math.pow(2, consecutive); // 60s, 120s, 240s...
-            const cappedDuration = Math.min(duration, 3600); // Max 1 hour (3600s)
+            // Credit errors get a longer base cooldown (10 min) since they won't self-resolve quickly
+            const baseSecs = resCall.status === 402 ? 600 : 60;
+            const duration = baseSecs * Math.pow(2, Math.min(consecutive, 4)); // cap exponent at 4
+            const cappedDuration = Math.min(duration, 3600); // max 1 hour
             const cooldownTime = new Date(Date.now() + cappedDuration * 1000).toISOString();
 
-            console.warn(`[gateway] 429 rate limit hit on key ${selectedKeyLabel}. Cooldown set for ${cappedDuration}s until ${cooldownTime}`);
+            console.warn(
+              `[gateway] ${resCall.status === 402 ? 'Credit/billing' : 'Rate-limit'} error on key ${selectedKeyLabel}. ` +
+              `Cooldown ${cappedDuration}s until ${cooldownTime}. Falling through to next tier.`
+            );
             await supabaseAdmin
               .from("gw_provider_keys")
-              .update({
-                cooldown_until: cooldownTime,
-                consecutive_429_count: consecutive + 1
-              })
+              .update({ cooldown_until: cooldownTime, consecutive_429_count: consecutive + 1 })
               .eq("id", selectedKeyId);
           }
 
@@ -558,9 +562,30 @@ ${prompt}`;
     }
 
     if (!success) {
+      // Determine the most useful HTTP status to return to caller:
+      // - If last error was 429 or 402 (exhausted keys), return 503 (service unavailable)
+      //   so callers can distinguish "bad request" (400) from "retry later" (503).
+      // - Preserve 500 for genuine internal errors.
+      const returnStatus =
+        lastErrorStatus === 429 || lastErrorStatus === 402 ? 503 :
+        lastErrorStatus === 400 ? 400 :
+        lastErrorStatus >= 500 ? 502 : 503;
+
+      const errorDetail = lastErrorMsg.startsWith("[CREDIT]")
+        ? `All provider keys for field '${fieldKey}' have exhausted their credit balance or hit rate limits. ` +
+          `Top up the relevant provider account or add a fallback key in the gateway dashboard. Last error: ${lastErrorMsg}`
+        : `All tiers and keys for field '${fieldKey}' failed. Last error: ${lastErrorMsg}`;
+
+      console.error(`[gateway] TOTAL FAILURE field=${fieldKey} status=${returnStatus} last_provider=${providerUsed || 'none'}: ${lastErrorMsg}`);
+
       return NextResponse.json(
-        { error: `All tiers and keys for field '${fieldKey}' failed. Last error: ${lastErrorMsg}` },
-        { status: lastErrorStatus }
+        {
+          error: errorDetail,
+          field: fieldKey,
+          last_provider_attempted: providerUsed || null,
+          tiers_attempted: sortedTiers.length,
+        },
+        { status: returnStatus }
       );
     }
 
