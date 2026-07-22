@@ -5,7 +5,7 @@ import { createSession } from "@/lib/auth";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { logAudit } from "@/lib/audit";
 
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "rimbanusaonline@gmail.com";
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "";
 const ADMIN_PASSWORD_HASH = process.env.ADMIN_PASSWORD_HASH || "";
 
 export async function POST(req: NextRequest) {
@@ -36,6 +36,13 @@ export async function POST(req: NextRequest) {
   }
 
   // ── Check email ─────────────────────────────────────────────────────────
+  if (!ADMIN_EMAIL) {
+    console.error("[auth/login] ADMIN_EMAIL is not configured!");
+    return NextResponse.json(
+      { error: "Server authentication not configured. Set ADMIN_EMAIL in .env.local" },
+      { status: 500 }
+    );
+  }
   if (email !== ADMIN_EMAIL) {
     return NextResponse.json(
       { error: "Email atau password salah." },
@@ -67,11 +74,20 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // ── bcrypt compare or plaintext fallback ──────────────────────────────────
+  // ── bcrypt compare only ──────────────────────────────────────────────────
+  // A plaintext-equality fallback used to run whenever the stored hash didn't start with
+  // $2a$/$2b$ — meaning a plaintext value in ADMIN_PASSWORD_HASH or gw_users.password_hash
+  // would work as a real password with zero indication anything was wrong. Any hash that
+  // isn't actually bcrypt is now a hard server misconfiguration, not a silent fallback.
   const isBcrypt = passwordHash.startsWith("$2a$") || passwordHash.startsWith("$2b$");
-  const isValid = isBcrypt
-    ? await bcrypt.compare(password, passwordHash)
-    : password === passwordHash;
+  if (!isBcrypt) {
+    console.error("[auth/login] Stored password hash is not a bcrypt hash — refusing to compare as plaintext.");
+    return NextResponse.json(
+      { error: "Server authentication misconfigured. Password hash must be generated with bcrypt." },
+      { status: 500 }
+    );
+  }
+  const isValid = await bcrypt.compare(password, passwordHash);
 
   if (!isValid) {
     await logAudit({ action: 'login_failed', actorEmail: email, targetType: 'auth', detail: { reason: 'wrong_password' }, ipAddress: ip });
