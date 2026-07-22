@@ -4,9 +4,50 @@ import { supabaseAdmin } from "@/lib/supabase";
 import fs from "fs";
 import path from "path";
 import crypto from "crypto";
+import dns from "dns/promises";
 
-const projectRoot = "/Users/bayu_1/Documents/0 MyAI OS/MyAI-OS-Console";
+const projectRoot = process.cwd();
 const dbJsonPath = path.resolve(projectRoot, "db.json");
+
+// This endpoint lets an authenticated owner make the server fetch an arbitrary URL — without
+// a check here, that URL could point at the cloud metadata service (169.254.169.254),
+// localhost, or another internal-only host, and the response gets handed back through Gemini's
+// summary. Blocks the obvious SSRF targets: non-http(s) schemes, loopback/link-local/private
+// hostnames, and — since a hostname can resolve to an internal IP even when the string itself
+// looks external (DNS rebinding) — the IP(s) it actually resolves to.
+const BLOCKED_HOSTNAMES = new Set(["localhost", "0.0.0.0", "metadata.google.internal"]);
+
+function isPrivateOrLoopbackIp(ip: string): boolean {
+  if (ip === "127.0.0.1" || ip === "::1") return true;
+  if (ip.startsWith("169.254.") || ip.startsWith("fe80:")) return true; // link-local incl. cloud metadata
+  if (ip.startsWith("10.") || ip.startsWith("192.168.")) return true;
+  if (/^172\.(1[6-9]|2\d|3[0-1])\./.test(ip)) return true;
+  if (ip.startsWith("fc") || ip.startsWith("fd")) return true; // IPv6 unique local
+  return false;
+}
+
+async function assertUrlIsSafeToFetch(url: URL): Promise<void> {
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    throw new Error("Hanya URL http/https yang diizinkan.");
+  }
+  const hostname = url.hostname.toLowerCase();
+  if (BLOCKED_HOSTNAMES.has(hostname) || hostname.endsWith(".local")) {
+    throw new Error("URL ini tidak diizinkan diakses.");
+  }
+  if (isPrivateOrLoopbackIp(hostname)) {
+    throw new Error("URL ini tidak diizinkan diakses.");
+  }
+  try {
+    const resolved = await dns.lookup(hostname, { all: true });
+    if (resolved.some((r) => isPrivateOrLoopbackIp(r.address))) {
+      throw new Error("URL ini tidak diizinkan diakses.");
+    }
+  } catch (e) {
+    if (e instanceof Error && e.message.includes("tidak diizinkan")) throw e;
+    // DNS lookup failing for another reason (e.g. genuinely unresolvable host) — let the
+    // actual fetch below surface that error instead of masking it here.
+  }
+}
 
 async function fetchAndExtractContent(url: string): Promise<{ title: string; content: string }> {
   // Fetch raw HTML
@@ -129,6 +170,12 @@ export async function POST(req: NextRequest) {
       parsedUrl = new URL(url);
     } catch {
       return NextResponse.json({ error: "URL tidak valid" }, { status: 400 });
+    }
+
+    try {
+      await assertUrlIsSafeToFetch(parsedUrl);
+    } catch (e) {
+      return NextResponse.json({ error: e instanceof Error ? e.message : "URL tidak diizinkan" }, { status: 400 });
     }
 
     const { title, content } = await fetchAndExtractContent(url);

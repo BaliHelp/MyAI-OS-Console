@@ -110,4 +110,5 @@ export async function checkRateLimit(
 export const RATE_LIMITS = {
   LOGIN: { endpoint: "auth/login", maxRequests: 5, windowMinutes: 15 },
   GEMINI: { endpoint: "gemini/query", maxRequests: 20, windowMinutes: 60 },
+  FORGOT_PASSWORD: { endpoint: "auth/forgot-password", maxRequests: 5, windowMinutes: 15 },
 } as const;

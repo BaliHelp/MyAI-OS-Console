@@ -22,7 +22,6 @@ interface ProviderKey {
   last_used_at: string | null;
   created_at: string;
   key_masked: string;
-  key_plain?: string;
   base_url?: string | null;
   model_name?: string | null;
 }
@@ -38,9 +37,29 @@ export default function SettingsTab({ lang, setLang, theme, setTheme, adminEmail
   const [providerKeys, setProviderKeys] = useState<ProviderKey[]>([]);
   const [keysLoading, setKeysLoading] = useState(true);
   const [revealedKeys, setRevealedKeys] = useState<Record<string, boolean>>({});
+  const [revealedValues, setRevealedValues] = useState<Record<string, string>>({});
+  const [revealLoading, setRevealLoading] = useState<Record<string, boolean>>({});
 
-  const toggleRevealKey = (id: string) => {
-    setRevealedKeys(prev => ({ ...prev, [id]: !prev[id] }));
+  const toggleRevealKey = async (id: string) => {
+    if (revealedKeys[id]) {
+      setRevealedKeys(prev => ({ ...prev, [id]: false }));
+      return;
+    }
+    if (revealedValues[id]) {
+      setRevealedKeys(prev => ({ ...prev, [id]: true }));
+      return;
+    }
+    setRevealLoading(prev => ({ ...prev, [id]: true }));
+    try {
+      const res = await fetch(`/api/provider-keys/${id}/reveal`);
+      const data = await res.json();
+      if (res.ok) {
+        setRevealedValues(prev => ({ ...prev, [id]: data.key_plain }));
+        setRevealedKeys(prev => ({ ...prev, [id]: true }));
+      }
+    } finally {
+      setRevealLoading(prev => ({ ...prev, [id]: false }));
+    }
   };
 
   // Delete confirmation state (inline 2-step, no browser confirm() popup)
@@ -580,11 +599,12 @@ export default function SettingsTab({ lang, setLang, theme, setTheme, adminEmail
                           <span className="flex items-center gap-1">
                             Key:{" "}
                             <code className="font-mono text-bento-text-primary bg-bento-surface px-1.5 py-0.5 rounded flex items-center gap-1">
-                              {revealedKeys[k.id] ? k.key_plain : k.key_masked}
+                              {revealedKeys[k.id] ? revealedValues[k.id] : k.key_masked}
                               <button
                                 type="button"
                                 onClick={() => toggleRevealKey(k.id)}
-                                className="ml-1 text-bento-text-secondary hover:text-bento-text-primary focus:outline-none"
+                                disabled={revealLoading[k.id]}
+                                className="ml-1 text-bento-text-secondary hover:text-bento-text-primary focus:outline-none disabled:opacity-50"
                               >
                                 {revealedKeys[k.id] ? (
                                   <EyeOff className="h-3 w-3" />

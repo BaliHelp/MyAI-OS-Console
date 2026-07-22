@@ -4,9 +4,10 @@ import { supabaseAdmin } from "@/lib/supabase";
 import { hashApiKey } from "@/lib/crypto";
 import { logAudit } from "@/lib/audit";
 
-const uuid = () =>
-  Math.random().toString(36).substring(2, 15) +
-  Math.random().toString(36).substring(2, 15);
+// Math.random() is not cryptographically secure and its internal state is predictable —
+// unacceptable for the actual secret material of a gateway API key. crypto was already
+// imported in this file; nothing else here used it for the key itself.
+const uuid = () => crypto.randomBytes(16).toString("hex");
 
 export async function GET() {
   if (!supabaseAdmin) {

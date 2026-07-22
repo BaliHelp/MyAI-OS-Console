@@ -14,16 +14,16 @@ export async function GET() {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  // Decrypt and return both masked and plain key
+  // Masked only — every provider secret used to ship to the browser in plaintext on every
+  // load of this list, whether or not "reveal" was ever clicked, since the toggle just showed
+  ///hid data already sitting in React state. Full plaintext is now only reachable one key at a
+  // time via GET /api/provider-keys/[id]/reveal, on demand.
   const processed = (data ?? []).map((k: Record<string, unknown>) => {
     let maskedKey = "••••••••";
-    let plainKey = "";
     try {
-      const plain = decryptKey(k.key_encrypted as string);
-      maskedKey = maskKey(plain);
-      plainKey = plain;
+      maskedKey = maskKey(decryptKey(k.key_encrypted as string));
     } catch {}
-    return { ...k, key_encrypted: undefined, key_masked: maskedKey, key_plain: plainKey };
+    return { ...k, key_encrypted: undefined, key_masked: maskedKey };
   });
 
   return NextResponse.json(processed);
