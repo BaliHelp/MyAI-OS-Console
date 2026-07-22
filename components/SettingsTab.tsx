@@ -43,6 +43,9 @@ export default function SettingsTab({ lang, setLang, theme, setTheme, adminEmail
     setRevealedKeys(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
+  // Delete confirmation state (inline 2-step, no browser confirm() popup)
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+
   // Test Connection States & Helper
   const [testingKeys, setTestingKeys] = useState<Record<string, boolean>>({});
   const [testResults, setTestResults] = useState<Record<string, { connected: boolean; details: string }>>({});
@@ -228,7 +231,7 @@ export default function SettingsTab({ lang, setLang, theme, setTheme, adminEmail
   };
 
   const handleDeleteKey = async (id: string) => {
-    if (!confirm("Apakah Anda yakin ingin menghapus API key provider ini?")) return;
+    // Confirmation is handled inline in UI — this is only called after user confirms
     try {
       const res = await fetch("/api/provider-keys", {
         method: "DELETE",
@@ -236,6 +239,7 @@ export default function SettingsTab({ lang, setLang, theme, setTheme, adminEmail
         body: JSON.stringify({ id }),
       });
       if (res.ok) {
+        setDeleteConfirmId(null);
         await fetchProviderKeys();
       }
     } catch (err) {
@@ -633,13 +637,32 @@ export default function SettingsTab({ lang, setLang, theme, setTheme, adminEmail
                             <ToggleLeft className="h-5 w-5 text-bento-text-secondary/50" />
                           )}
                         </button>
-                        <button
-                          onClick={() => handleDeleteKey(k.id)}
-                          title="Hapus Key"
-                          className="p-1.5 rounded-lg hover:bg-red-500/10 text-red-400 transition-all"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
+                        {/* Delete Key — inline 2-step confirmation */}
+                        {deleteConfirmId === k.id ? (
+                          <div className="flex items-center gap-1.5 animate-fade-in">
+                            <span className="text-[11px] text-red-400 font-semibold whitespace-nowrap">Hapus key ini?</span>
+                            <button
+                              onClick={() => handleDeleteKey(k.id)}
+                              className="px-2 py-0.5 text-[11px] font-bold rounded-md bg-red-500 text-white hover:bg-red-600 transition-all"
+                            >
+                              Ya, Hapus
+                            </button>
+                            <button
+                              onClick={() => setDeleteConfirmId(null)}
+                              className="px-2 py-0.5 text-[11px] font-bold rounded-md border border-bento-border text-bento-text-secondary hover:text-bento-text-primary transition-all"
+                            >
+                              Batal
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => setDeleteConfirmId(k.id)}
+                            title="Hapus Key"
+                            className="p-1.5 rounded-lg hover:bg-red-500/10 text-red-400 transition-all"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        )}
                       </div>
                     </div>
                   ))}
