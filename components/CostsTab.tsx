@@ -16,6 +16,9 @@ const PROVIDER_COSTS: Record<string, { input: number; output: number; label: str
 };
 const DEFAULT_COST = { input: 1.00, output: 1.00, label: "Unknown", color: "#9CA3AF" };
 
+// Palette for per-app breakdown bars (apps have no preset color like providers do).
+const APP_COLORS = ["#5B8DEF", "#10B981", "#E879F9", "#F59E0B", "#6366F1", "#EF4444", "#14B8A6", "#A855F7"];
+
 type TimeRange = 'today' | '7d' | '30d' | '90d' | '180d' | '1y' | 'all';
 
 const TIME_RANGE_OPTIONS: { value: TimeRange; label: string }[] = [
@@ -115,6 +118,24 @@ export default function CostsTab({ logs, lang, theme, onRefreshLogs }: CostsTabP
   const totalTokens = providerStats.reduce((s, p) => s + p.tokens, 0);
   const totalCalls = mainLogs.length;
   const maxCost = providerStats[0]?.cost ?? 1;
+
+  // Per-app cost attribution. Data is already present in gw_usage_logs via app_name
+  // (denormalized) — same source the per-key call counts in AppsTab use.
+  const appStats = useMemo(() => {
+    const map: Record<string, { tokens: number; calls: number; cost: number }> = {};
+    mainLogs.forEach(log => {
+      const a = log.app_name || 'Unknown App';
+      if (!map[a]) map[a] = { tokens: 0, calls: 0, cost: 0 };
+      map[a].tokens += log.tokens_used;
+      map[a].calls += 1;
+      map[a].cost += calcCost(log.provider || 'unknown', log.tokens_used);
+    });
+    return Object.entries(map)
+      .map(([app, stats]) => ({ app, ...stats }))
+      .sort((a, b) => b.cost - a.cost)
+      .map((row, i) => ({ ...row, color: APP_COLORS[i % APP_COLORS.length] }));
+  }, [mainLogs]);
+  const maxAppCost = appStats[0]?.cost ?? 1;
 
   const sandboxCost = useMemo(() => {
     return sandboxLogs.reduce((sum, log) => sum + calcCost(log.provider || 'unknown', log.tokens_used), 0);
@@ -253,6 +274,43 @@ export default function CostsTab({ logs, lang, theme, onRefreshLogs }: CostsTabP
                   <div
                     className="h-full rounded-full transition-all duration-500"
                     style={{ width: `${(p.cost / maxCost) * 100}%`, backgroundColor: p.color }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Per-App Breakdown */}
+      <div className="p-6 rounded-2xl border border-bento-border bg-bento-surface">
+        <h4 className="font-bold text-sm tracking-tight mb-5 text-bento-text-primary">Rincian per Aplikasi</h4>
+
+        {appStats.length === 0 ? (
+          <div className="text-center py-12 opacity-50">
+            <BarChart2 className="h-10 w-10 mx-auto mb-2 stroke-1" />
+            <p className="text-sm font-semibold">Belum ada data penggunaan</p>
+            <p className="text-xs mt-1">Ganti filter waktu atau tunggu panggilan AI pertama.</p>
+          </div>
+        ) : (
+          <div className="space-y-5">
+            {appStats.map(a => (
+              <div key={a.app}>
+                <div className="flex items-center justify-between mb-1.5">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: a.color }} />
+                    <span className="text-sm font-semibold text-bento-text-primary">{a.app}</span>
+                    <span className="text-[10px] text-bento-text-secondary">{a.calls} panggilan</span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-sm font-bold text-bento-text-primary">${a.cost.toFixed(4)}</span>
+                    <span className="text-[10px] text-bento-text-secondary ml-2">{a.tokens.toLocaleString()} tok</span>
+                  </div>
+                </div>
+                <div className="h-2 rounded-full bg-bento-surface-lighter overflow-hidden">
+                  <div
+                    className="h-full rounded-full transition-all duration-500"
+                    style={{ width: `${(a.cost / maxAppCost) * 100}%`, backgroundColor: a.color }}
                   />
                 </div>
               </div>

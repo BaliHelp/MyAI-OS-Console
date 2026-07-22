@@ -1,8 +1,8 @@
 # MASTER ECOSYSTEM REPORT: MYAI OS CONSOLE
 **Ecosystem Owner:** Boss Bayu (`damnbayu@gmail.com`)  
-**Ecosystem Version:** 1.2.0-PROD (Enterprise Gateway Edition)  
-**Security Status:** Hardened & Relational  
-**Date Generated:** July 16, 2026 (System Local Time)  
+**Ecosystem Version:** 1.4.0-PROD (Enterprise Gateway Edition)  
+**Security Status:** Hardened & Relational — Security Hardening Pass + Gateway Routing Correctness applied July 22, 2026  
+**Date Generated:** July 22, 2026 (System Local Time)  
 
 ---
 
@@ -55,7 +55,7 @@ The application operates on an optimized full-stack architecture designed for hi
 * **Data Visualizations:** Recharts SVG area charts mapping daily token consumption.
 * **Server Middleware:** Express with standard Helmet security shielding, JSON body-parsing, and path routing.
 * **Database Driver:** `@supabase/supabase-js` initializing custom schema isolation (`gateway_console`).
-* **Cryptographic Libraries:** Native Node.js `crypto` (AES-256-CBC with scrypt key derivation) and `bcryptjs` (salt rounds 10).
+* **Cryptographic Libraries:** Native Node.js `crypto` (AES-256-GCM authenticated encryption with per-encryption random salt + scrypt key derivation) and `bcryptjs` (salt rounds 10).
 
 ---
 
@@ -77,7 +77,7 @@ To ensure the `.env.local` configurations and the database are always in perfect
 * **Reconciliation:** On boot or manual sync, the engine matches `.env.local` keys with existing database records.
 * **Label Alignment:** Corrects labels and mappings dynamically (e.g. `Gemini Key 1`, `GPT Key 2`).
 * **Legacy Clean-up:** Automatically deletes legacy or duplicate keys that are no longer in `.env.local`.
-* **Symmetric AES-256-CBC Encryption:** Keys are encrypted using a 32-byte derived key. Plaintext secrets never touch persistent storage or system logs.
+* **Symmetric AES-256-GCM Encryption:** Keys are encrypted with authenticated AES-256-GCM using a 32-byte scrypt-derived key and a random salt per encryption (the auth tag detects any ciphertext tampering). Plaintext secrets never touch persistent storage or system logs. Decryption remains backward-compatible with legacy CBC-format records.
 
 ### B. Priority-Based Key Selection & Active Failover Loop
 Designed to support high availability and cost efficiency (especially for Free Tier keys with strict RPM limits):
@@ -92,6 +92,29 @@ Designed to support high availability and cost efficiency (especially for Free T
 * **Change Password Module:** Fully implemented in the Settings tab.
 * **Bcrypt Protection:** Validates the owner's current password using `bcryptjs.compareSync` against the stored hash before applying the new secure hash (generated using `bcryptjs.hashSync` with 10 salt rounds).
 * **Logging Prevention:** Fully masked input fields with zero plaintext logging in stdout/stderr.
+
+### D. Security Hardening Pass — July 22, 2026
+A dedicated security review closed a set of confirmed vulnerabilities. All items below are implemented, `tsc`-clean, build-clean, committed (`2ce953c`, `d24be84`), and pushed to `origin/main`.
+
+1. **Unauthenticated account-takeover closed (CRITICAL):** `POST /api/auth/forgot-password` previously reset any known account to a hardcoded password (`"Bali2026"`) and returned it — with no authentication. It is now gated by a server-only `PASSWORD_RESET_SECRET` (constant-time compared, never sent to a browser), generates a fresh random password every time, is rate-limited, and is audit-logged. It **fails closed (503)** when the secret is unconfigured.
+2. **Provider-key plaintext exposure closed (CRITICAL):** `GET /api/provider-keys` now returns only masked keys. Full plaintext is available exclusively per-key via `GET /api/provider-keys/[id]/reveal`, which is audit-logged. `SettingsTab.tsx` was updated to match.
+3. **Weak client-key entropy fixed (HIGH):** Client API tokens (`sk_app_xxxx`) are now generated with `crypto.randomBytes` instead of `Math.random()`.
+4. **SSRF egress guard added (HIGH):** `POST /api/knowledge/import-url` now validates the hostname/IP and its resolved DNS address, rejecting private/internal targets rather than trusting the raw string.
+5. **Plaintext-password login fallback removed (MEDIUM):** A stored hash that is not bcrypt now hard-fails (500) instead of being compared as plaintext. The hardcoded `ADMIN_EMAIL` fallback was removed from source.
+6. **Authenticated encryption upgrade (MEDIUM):** `lib/crypto.ts` moved from AES-256-CBC with a static salt to AES-256-GCM with a random per-encryption salt. Verified backward-compatible via round-trip tests against both legacy and new formats.
+7. **Lint restored:** `next lint` (removed in Next 16) was replaced with a native flat-config `eslint.config.js` built on `eslint-config-next`; `npm run lint` runs again.
+
+**Operational dependency:** the recovery flow requires `PASSWORD_RESET_SECRET` in every environment. It is present in local `.env.local` and must be added to Vercel (Production + Preview) for the `my-ai-os-console` project. Until then, `forgot-password` returns 503 (safe, fail-closed).
+
+### E. Gateway Routing Correctness & Multi-Tenant Update — July 22, 2026
+Reconciliation of a consumer-side strategy memo against the actual Gateway source found the memo's headline recommendation (per-application API keys) was **already the shipped design**, but surfaced one real latent bug and two reproducibility gaps. All items below are implemented, `tsc`-clean, and build-clean.
+
+1. **Vision-capability guard (correctness bug fixed):** `supportsVision` was declared on every provider adapter but never consulted in routing — an image sent to a non-vision provider (deepseek/grok) was silently dropped and answered from text alone. The gateway (`app/api/v1/chat/completions/route.ts`) now (a) rejects with `422` when an image is uploaded to a field that has no vision-capable provider in scope, and (b) filters non-vision providers out of every tier while an image is present. OCR correctness is now a code guarantee, not a side effect of seed data.
+2. **Persona-free multi-tenant field:** a new `chatbot_generic` field lets a second caller supply its own voice. A caller-provided `system` message (previously discarded) is now honored for free-form, non-persona fields — but is deliberately ignored for persona fields (`chatbot_general`/`chatbot_checkout`, keeping "MyVISA AI" exclusive) and for strict-schema fields (OCR / visa extraction, protecting their JSON contract).
+3. **Authoritative field/tier routing:** `supabase/migrations/20260722_authoritative_field_routing.sql` deduplicates `gw_field_pool_assignments`, adds a `UNIQUE (field_key, provider)` constraint, and re-asserts the full routing table idempotently — resolving the contradictory OCR seed history across earlier migrations. OCR/vision fields are pinned to vision-capable providers (gemini → gpt → claude); `structured_extraction` is codified.
+4. **Per-application cost breakdown:** `components/CostsTab.tsx` adds a "Rincian per Aplikasi" pivot using the `app_name` already recorded in `gw_usage_logs`, complementing the existing per-provider view.
+
+**Operational dependency:** migration `20260722_authoritative_field_routing.sql` must be run in the Supabase SQL Editor to reconcile the live routing table with the source. Until then, live OCR tiering reflects the older, contradictory seed state.
 
 ---
 
@@ -121,9 +144,12 @@ Displays complete API transaction logs searchable by client app, AI provider, re
 
 | Security Layer | Implemented Feature | Primary Target / Vector Protected |
 | :--- | :--- | :--- |
-| **Data At Rest** | AES-256-CBC Symmetric Encryption | Protects upstream API keys (Gemini, Claude, GPT, Grok, Deepseek) from database leaks |
-| **Authentication** | Bcrypt Hashing (Salt Cost 10) | Safeguards console administrator credentials from database intrusion |
-| **Transport Layer** | Express Helmet Configuration | Blocks clickjacking, content sniffing, and common cross-site attacks |
+| **Data At Rest** | AES-256-GCM Authenticated Encryption (random per-encryption salt) | Protects upstream API keys (Gemini, Claude, GPT, Grok, Deepseek) from database leaks and detects ciphertext tampering |
+| **Authentication** | Bcrypt Hashing (Salt Cost 10); non-bcrypt hashes hard-fail | Safeguards console administrator credentials; removes the plaintext-comparison fallback |
+| **Account Recovery** | Server-only `PASSWORD_RESET_SECRET` gate (constant-time), random reset password, rate-limited, audit-logged, fail-closed | Closes the unauthenticated account-takeover path on `forgot-password` |
+| **Secret Disclosure** | Masked-by-default key listing; plaintext only via audit-logged per-key reveal endpoint | Prevents bulk plaintext provider-key exfiltration |
+| **Egress / SSRF** | Hostname + resolved-DNS/IP validation on URL import | Blocks requests to internal/metadata/private addresses |
+| **Key Generation** | `crypto.randomBytes` CSPRNG for client tokens | Prevents predictable/guessable `sk_app_xxxx` keys |
 | **Privacy Control** | Last-4 Masking Representation | Prevents shoulder-surfing exposure in shared administrative workplaces |
 | **Cost Overruns** | Client Token Rate-Limiting | Throttles rogue clients from triggering massive loop calls |
 | **Resource Safety** | Least-Recently-Used Key Pool Rotation | Distributes API traffic evenly, preventing upstream IP rate limiting |

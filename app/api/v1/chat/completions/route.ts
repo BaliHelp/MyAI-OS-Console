@@ -67,11 +67,24 @@ export async function POST(req: NextRequest) {
     if (body.prompt) {
       prompt = body.prompt;
     } else if (body.messages && Array.isArray(body.messages) && body.messages.length > 0) {
-      prompt = body.messages[body.messages.length - 1].content || "";
+      // Prefer the last user message so a trailing system message isn't mistaken for the prompt.
+      const lastUser = [...body.messages].reverse().find((m: any) => !m?.role || m.role === "user");
+      prompt = (lastUser?.content ?? body.messages[body.messages.length - 1].content) || "";
     }
 
     if (!prompt) {
       return NextResponse.json({ error: "Prompt or messages are required" }, { status: 400 });
+    }
+
+    // Caller-supplied system prompt. Accept an explicit `system` field or the last role:"system"
+    // message. It is honored only for non-persona fields (see §4c) — persona fields ignore it so
+    // this site's voice can't be overridden by a caller.
+    let callerSystemPrompt = "";
+    if (typeof body.system === "string") {
+      callerSystemPrompt = body.system.trim();
+    } else if (body.messages && Array.isArray(body.messages)) {
+      const sys = [...body.messages].reverse().find((m: any) => m?.role === "system");
+      if (sys && typeof sys.content === "string") callerSystemPrompt = sys.content.trim();
     }
 
     // ── Deteksi dan parsing semua tipe file yang diunggah ─────────────────
@@ -99,6 +112,11 @@ export async function POST(req: NextRequest) {
       base64Data: uploadedFile.imageData.base64Data
     } : null;
 
+    // A request carrying image data (category "image" or "pdf-scanned") can only be served by a
+    // vision-capable provider. Non-vision adapters (deepseek/grok) silently ignore the image and
+    // answer from the text prompt alone, so they must never be attempted for these requests.
+    const requiresVision = !!parsedFile;
+
     // ── 3a. Validate Job Routing Field ────────────────────────────────────
     let validKeys = [
       "ocr_id_document",
@@ -112,6 +130,7 @@ export async function POST(req: NextRequest) {
       "chatbot_checkout",
       "orchestrator",
       "chatbot",
+      "chatbot_generic",
       "reasoning_general",
       "face_liveness_scan"
     ];
@@ -304,6 +323,21 @@ ${resolvedSystemPrompt}`;
       }
     }
 
+    // 4c-bis. Honor a caller-supplied system prompt for free-form, non-persona fields only.
+    //   - Persona fields (chatbot_general/checkout) ignore it so this site's "MyVISA AI" voice
+    //     can't be overridden by a caller.
+    //   - Fields with a strict output_schema (OCR / visa extraction) ignore it too, so a caller
+    //     prompt can't degrade or break their required JSON contract.
+    // This leaves chat/reasoning/coding/content/structured_extraction free to take a caller voice.
+    const fieldHasStrictSchema = !!(fieldSpec && fieldSpec.output_schema);
+    if (callerSystemPrompt && !CHAT_FIELDS.includes(fieldKey) && !fieldHasStrictSchema) {
+      resolvedSystemPrompt = `--- CALLER INSTRUCTIONS ---
+${callerSystemPrompt}
+--- TASK INSTRUCTIONS ---
+${resolvedSystemPrompt}`;
+      console.log(`[gateway] Honored caller system prompt for field '${fieldKey}' (${callerSystemPrompt.length} chars)`);
+    }
+
     // Append core knowledge base context
     resolvedSystemPrompt += `\n\nBerikut adalah profil korporat dan basis pengetahuan produk kami. Gunakan informasi ini jika relevan untuk menjawab pertanyaan:
 
@@ -354,16 +388,37 @@ ${prompt}`;
     // Get sorted list of tiers (e.g., [1, 2, 3])
     const sortedTiers = Object.keys(tierGroups).map(Number).sort((a, b) => a - b);
 
+    // Fail loudly when an image was uploaded but no vision-capable provider is configured and
+    // in-scope for this field. Without this, the request would be filtered out of every tier
+    // below and fall through to the misleading "No keys attempted" 503 — or, worse, reach a
+    // non-vision provider that drops the image and hallucinates an answer.
+    if (requiresVision) {
+      const visionCapableInScope = Array.from(new Set(assignments.map((a) => a.provider)))
+        .filter((p) => !keyData.provider_scope || keyData.provider_scope.includes(p))
+        .filter((p) => PROVIDER_REGISTRY[p]?.supportsVision === true);
+
+      if (visionCapableInScope.length === 0) {
+        return NextResponse.json(
+          {
+            error: `Field '${fieldKey}' received an image, but no vision-capable provider is configured and in-scope for this key. Assign a vision provider (gemini, gpt, or claude) to this field, or grant this key access to one.`,
+          },
+          { status: 422 }
+        );
+      }
+    }
+
     // Loop through each tier
     tierOuterLoop:
     for (const tier of sortedTiers) {
       tierUsed = tier;
-      const providersInTier = tierGroups[tier].filter(
-        (p) => !keyData.provider_scope || keyData.provider_scope.includes(p)
-      );
+      const providersInTier = tierGroups[tier]
+        .filter((p) => !keyData.provider_scope || keyData.provider_scope.includes(p))
+        // When the request has an image, skip providers whose adapter can't accept it —
+        // otherwise deepseek/grok would silently drop the image and answer from text alone.
+        .filter((p) => !requiresVision || PROVIDER_REGISTRY[p]?.supportsVision === true);
 
       if (providersInTier.length === 0) {
-        console.warn(`[gateway] No allowed providers in tier ${tier} for current key scope: ${keyData.provider_scope}`);
+        console.warn(`[gateway] No allowed${requiresVision ? " vision-capable" : ""} providers in tier ${tier} for current key scope: ${keyData.provider_scope}`);
         continue;
       }
 
