@@ -19,6 +19,6 @@ export default function robots(): MetadataRoute.Robots {
         "/api/"
       ],
     },
-    sitemap: "https://console.myai.bali.technology/sitemap.xml",
+    sitemap: "https://console.myai.nexus/sitemap.xml",
   };
 }

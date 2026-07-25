@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://console.myai.bali.technology"),
+  metadataBase: new URL("https://console.myai.nexus"),
   title: {
     default: "MyAI OS Console",
     template: "%s — MyAI OS"
@@ -19,7 +19,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "MyAI OS Console",
     description: "MyAI OS adalah AI Gateway terpusat untuk ekosistem Bali Enterprises Group, dikembangkan oleh Bali Technology (divisi riset PT Indonesian Visas Agency) dengan IndoDesign.website sebagai kontributor antarmuka.",
-    url: "https://console.myai.bali.technology",
+    url: "https://console.myai.nexus",
     siteName: "MyAI OS",
     locale: "id_ID",
     type: "website",
@@ -62,10 +62,10 @@ export default function RootLayout({
               "@graph": [
                 {
                   "@type": "Organization",
-                  "@id": "https://myai.bali.technology/#organization",
+                  "@id": "https://myai.nexus/#organization",
                   "name": "MyAI OS",
                   "legalName": "MyAI OS - a Bali Technology product",
-                  "url": "https://console.myai.bali.technology",
+                  "url": "https://console.myai.nexus",
                   "description": "MyAI OS adalah AI Gateway terpusat yang menyatukan seluruh integrasi kecerdasan buatan untuk ekosistem Bali Enterprises Group — dipersiapkan menjadi pelopor infrastruktur AI lokal Indonesia, mendukung Indonesian Visas, MyBusiness, Tropic Tech, dan divisi lainnya di bawah satu kendali terpusat.",
                   "parentOrganization": {
                     "@type": "Organization",
@@ -86,30 +86,38 @@ export default function RootLayout({
                   },
                   "location": {
                     "@type": "Place",
+                    "name": "Bali, Indonesia",
+                    "hasMap": "https://maps.app.goo.gl/n3NNdr7uUuN2mhnQ8",
+                    "geo": {
+                      "@type": "GeoCoordinates",
+                      "latitude": -8.4095,
+                      "longitude": 115.1889
+                    },
                     "address": {
                       "@type": "PostalAddress",
                       "addressRegion": "Bali",
                       "addressCountry": "ID"
                     }
                   },
+                  "areaServed": { "@type": "Country", "name": "Indonesia" },
                   "sameAs": ["https://indonesianvisas.com", "https://bali.enterprises", "https://bali.technology"]
                 },
                 {
                   "@type": "WebSite",
-                  "@id": "https://console.myai.bali.technology/#website",
-                  "url": "https://console.myai.bali.technology",
+                  "@id": "https://console.myai.nexus/#website",
+                  "url": "https://console.myai.nexus",
                   "name": "MyAI OS Console",
-                  "publisher": { "@id": "https://myai.bali.technology/#organization" },
+                  "publisher": { "@id": "https://myai.nexus/#organization" },
                   "inLanguage": "id-ID"
                 },
                 {
                   "@type": "SoftwareApplication",
-                  "@id": "https://console.myai.bali.technology/#software",
+                  "@id": "https://console.myai.nexus/#software",
                   "name": "MyAI OS Console",
                   "applicationCategory": "BusinessApplication",
                   "operatingSystem": "Web",
                   "description": "Panel kendali AI Gateway terpusat: manajemen multi-provider AI (Gemini, GPT, Claude, dan lainnya), routing tugas berbasis field, knowledge base bersama, dan data center ekstraksi dokumen untuk seluruh ekosistem Bali Enterprises Group.",
-                  "creator": { "@id": "https://myai.bali.technology/#organization" },
+                  "creator": { "@id": "https://myai.nexus/#organization" },
                   "featureList": [
                     "Multi-provider AI routing dengan failover otomatis",
                     "Shared knowledge base lintas aplikasi",

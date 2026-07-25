@@ -10,10 +10,10 @@ export default async function LoginPage() {
   const orgJsonLd = {
     "@context": "https://schema.org",
     "@type": "Organization",
-    "@id": "https://console.myai.bali.technology/#organization",
+    "@id": "https://console.myai.nexus/#organization",
     "name": "MyAI OS",
     "legalName": "MyAI OS - a Bali Technology product",
-    "url": "https://console.myai.bali.technology",
+    "url": "https://console.myai.nexus",
     "description": "MyAI OS adalah AI Gateway terpusat untuk ekosistem Bali Enterprises Group, dikembangkan oleh Bali Technology (divisi riset PT Indonesian Visas Agency) dengan IndoDesign.website sebagai kontributor antarmuka. Menyinergikan integrasi kecerdasan buatan terpadu untuk pelopor infrastruktur AI lokal Indonesia.",
     "parentOrganization": {
       "@type": "Organization",
@@ -37,12 +37,18 @@ export default async function LoginPage() {
       "@type": "Place",
       "name": "Bali, Indonesia",
       "hasMap": "https://maps.app.goo.gl/n3NNdr7uUuN2mhnQ8",
+      "geo": {
+        "@type": "GeoCoordinates",
+        "latitude": -8.4095,
+        "longitude": 115.1889
+      },
       "address": {
         "@type": "PostalAddress",
-        "addressLocality": "Bali",
+        "addressRegion": "Bali",
         "addressCountry": "ID"
       }
     },
+    "areaServed": { "@type": "Country", "name": "Indonesia" },
     "sameAs": [
       "https://indonesianvisas.com",
       "https://bali.enterprises",
@@ -69,13 +75,13 @@ export default async function LoginPage() {
         "@type": "ListItem",
         "position": 2,
         "name": "MyAI OS",
-        "item": "https://console.myai.bali.technology"
+        "item": "https://console.myai.nexus"
       },
       {
         "@type": "ListItem",
         "position": 3,
         "name": "Login",
-        "item": "https://console.myai.bali.technology/login"
+        "item": "https://console.myai.nexus/login"
       }
     ]
   };

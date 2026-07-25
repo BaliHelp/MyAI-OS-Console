@@ -1,7 +1,7 @@
 import { MetadataRoute } from "next";
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  const baseUrl = "https://console.myai.bali.technology";
+  const baseUrl = "https://console.myai.nexus";
 
   const routes = [
     { url: `${baseUrl}/login`, priority: 1.0 },

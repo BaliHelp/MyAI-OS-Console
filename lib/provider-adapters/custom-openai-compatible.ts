@@ -40,7 +40,7 @@ export const customOpenaiAdapter: ProviderAdapter = {
           "Content-Type": "application/json",
           Authorization: `Bearer ${providerApiKey}`,
           // OpenRouter specific headers (ignored by other OpenAI compatible backends)
-          "HTTP-Referer": "https://console.myai.bali.technology",
+          "HTTP-Referer": "https://console.myai.nexus",
           "X-Title": "MyAI OS Console Gateway",
         },
         body: JSON.stringify({

@@ -119,7 +119,7 @@ export async function POST(req: NextRequest) {
       const res = await fetch(testUrl, {
         headers: { 
           "Authorization": `Bearer ${rawKey}`,
-          "HTTP-Referer": "https://console.myai.bali.technology",
+          "HTTP-Referer": "https://console.myai.nexus",
           "X-Title": "MyAI OS Console Gateway"
         }
       });
