@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
+import { parseDocumentToMarkdown } from "@/lib/document-parser";
 import crypto from "crypto";
+
 
 /**
  * POST /api/data-center/ingest
@@ -64,7 +66,7 @@ export async function POST(req: NextRequest) {
   };
   const sourceType = SOURCE_TYPE_MAP[event_type] || "manual_document";
 
-  const rawText: string =
+  const unparsedText: string =
     metadata.raw_text ||
     (event_type === "chat_interaction"
       ? `[CHAT] User: ${payload.user_message || ""} | AI: ${(payload.ai_response || "").slice(0, 400)}`
@@ -78,7 +80,11 @@ export async function POST(req: NextRequest) {
           .slice(0, 20)
           .join(" | "));
 
+  const parsedMarkdown = parseDocumentToMarkdown(unparsedText || payload, null, `${source_app || 'system'}:${event_type}`);
+  const rawText: string = parsedMarkdown.markdown;
+
   const recordId = crypto.randomUUID();
+
   const { data: inserted, error: insertError } = await supabaseAdmin
     .from("gw_data_center")
     .insert({
