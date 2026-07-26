@@ -36,9 +36,10 @@ interface AppsTabProps {
   onCreateApp: (name: string, slug: string, tier: 'internal' | 'community') => Promise<void>;
   onGenerateKey: (clientAppId: string, scope: string[], rateLimit: number | null) => Promise<{ full_key: string } & ApiKey>;
   onRevokeKey: (keyId: string) => Promise<void>;
+  onDeleteApp?: (appId: string) => Promise<void>;
 }
 
-export default function AppsTab({ apps, apiKeys, logs, lang, theme, onCreateApp, onGenerateKey, onRevokeKey }: AppsTabProps) {
+export default function AppsTab({ apps, apiKeys, logs, lang, theme, onCreateApp, onGenerateKey, onRevokeKey, onDeleteApp }: AppsTabProps) {
   const t = translations[lang];
 
   // Tab State
@@ -60,6 +61,12 @@ export default function AppsTab({ apps, apiKeys, logs, lang, theme, onCreateApp,
 
   // Revoke confirmation state
   const [revokeConfirmId, setRevokeConfirmId] = useState<string | null>(null);
+
+  // App Delete confirmation state
+  const [deleteAppTarget, setDeleteAppTarget] = useState<ClientApp | null>(null);
+  const [deleteConfirmInput, setDeleteConfirmInput] = useState("");
+  const [deletingApp, setDeletingApp] = useState(false);
+  const [deleteAppError, setDeleteAppError] = useState("");
 
   // Auto generate slug from name
   const handleAppNameChange = (val: string) => {
@@ -158,14 +165,30 @@ export default function AppsTab({ apps, apiKeys, logs, lang, theme, onCreateApp,
               </div>
             </div>
 
-            <button
-              onClick={() => { setIsKeyModalOpen(true); setGeneratedKeyResult(null); }}
-              id="generate-key-btn"
-              className="flex items-center gap-2 px-4 py-2.5 text-xs font-bold rounded-xl bg-bento-accent hover:bg-bento-accent/90 text-white shadow-xs transition-all duration-150"
-            >
-              <Plus className="h-4 w-4" />
-              <span>{t.generateKey}</span>
-            </button>
+            <div className="flex items-center gap-3">
+              {onDeleteApp && (
+                <button
+                  onClick={() => {
+                    setDeleteAppTarget(selectedApp);
+                    setDeleteConfirmInput("");
+                    setDeleteAppError("");
+                  }}
+                  className="flex items-center gap-2 px-3.5 py-2.5 text-xs font-bold rounded-xl border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 text-red-400 transition-all duration-150"
+                  title="Hapus Aplikasi"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  <span>Hapus Aplikasi</span>
+                </button>
+              )}
+              <button
+                onClick={() => { setIsKeyModalOpen(true); setGeneratedKeyResult(null); }}
+                id="generate-key-btn"
+                className="flex items-center gap-2 px-4 py-2.5 text-xs font-bold rounded-xl bg-bento-accent hover:bg-bento-accent/90 text-white shadow-xs transition-all duration-150"
+              >
+                <Plus className="h-4 w-4" />
+                <span>{t.generateKey}</span>
+              </button>
+            </div>
           </div>
 
           {/* Key list */}
@@ -311,13 +334,29 @@ export default function AppsTab({ apps, apiKeys, logs, lang, theme, onCreateApp,
                     <div className="p-2.5 rounded-xl transition-colors bg-bento-surface-lighter group-hover:bg-bento-accent-muted text-bento-text-secondary group-hover:text-bento-accent">
                       <AppWindow className="h-5 w-5" />
                     </div>
-                    <span className={`px-2.5 py-0.5 text-[9px] font-extrabold rounded-full uppercase tracking-wide ${
-                      app.tier === 'internal'
-                        ? 'bg-bento-success/10 text-bento-success border border-bento-success/15'
-                        : 'bg-bento-accent/10 text-bento-accent border border-bento-accent/15'
-                    }`}>
-                      {app.tier === 'internal' ? 'internal' : 'community'}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className={`px-2.5 py-0.5 text-[9px] font-extrabold rounded-full uppercase tracking-wide ${
+                        app.tier === 'internal'
+                          ? 'bg-bento-success/10 text-bento-success border border-bento-success/15'
+                          : 'bg-bento-accent/10 text-bento-accent border border-bento-accent/15'
+                      }`}>
+                        {app.tier === 'internal' ? 'internal' : 'community'}
+                      </span>
+                      {onDeleteApp && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDeleteAppTarget(app);
+                            setDeleteConfirmInput("");
+                            setDeleteAppError("");
+                          }}
+                          className="p-1.5 rounded-lg hover:bg-red-500/20 text-gray-500 hover:text-red-400 transition-colors"
+                          title="Hapus Aplikasi"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   <div>
@@ -530,6 +569,92 @@ export default function AppsTab({ apps, apiKeys, logs, lang, theme, onCreateApp,
           </div>
         </div>
       )}
+      {/* MODAL 3: DOUBLE CONFIRMATION DELETE APP */}
+      {deleteAppTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs p-4 animate-fade-in">
+          <div className={`w-full max-w-md p-6 rounded-2xl border shadow-2xl space-y-4 ${
+            theme === 'dark' ? 'bg-[#121316] border-red-500/30 text-white' : 'bg-white border-red-200 text-black'
+          }`}>
+            <div className="flex items-center gap-3 text-red-500">
+              <div className="p-2.5 rounded-xl bg-red-500/10 border border-red-500/20">
+                <ShieldAlert className="h-6 w-6" />
+              </div>
+              <div>
+                <h4 className="font-extrabold text-base">Hapus Aplikasi Permanen</h4>
+                <p className="text-xs text-gray-400">Tindakan ini tidak dapat dibatalkan</p>
+              </div>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-red-500/10 border border-red-500/20 text-xs space-y-2 text-red-300">
+              <p className="font-bold">⚠️ Perhatian Pengadopsi Master Data:</p>
+              <ul className="list-disc pl-4 space-y-1 opacity-90">
+                <li>Aplikasi <strong className="text-white underline">{deleteAppTarget.name}</strong> (`{deleteAppTarget.slug}`) akan dihapus.</li>
+                <li>Semua <strong>{apiKeys.filter(k => k.client_app_id === deleteAppTarget.id && k.status === 'active').length} API Key aktif</strong> aplikasi ini akan langsung dicabut/dihapus.</li>
+                <li>Data historis di Data Center akan tetap tersimpan aman (dialihkan ke status <em>unassigned/internal</em>).</li>
+              </ul>
+            </div>
+
+            {deleteAppError && (
+              <div className="p-2.5 rounded-xl bg-red-500/20 text-red-400 text-xs font-semibold">
+                {deleteAppError}
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <label className="text-xs font-semibold text-gray-400 block">
+                Ketik <strong className="text-red-400 font-mono">DELETE</strong> atau nama slug <strong className="text-white font-mono">{deleteAppTarget.slug}</strong> untuk konfirmasi:
+              </label>
+              <input
+                type="text"
+                value={deleteConfirmInput}
+                onChange={(e) => setDeleteConfirmInput(e.target.value)}
+                placeholder="DELETE"
+                autoFocus
+                className="w-full px-4 py-2.5 text-sm font-mono rounded-xl border border-red-500/30 bg-black/40 text-white focus:outline-none focus:border-red-500"
+              />
+            </div>
+
+            <div className="flex justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setDeleteAppTarget(null)}
+                className="px-4 py-2.5 text-xs font-bold rounded-xl border border-bento-border text-gray-300 hover:bg-bento-surface-lighter transition-all"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                disabled={
+                  deletingApp ||
+                  (deleteConfirmInput.trim().toUpperCase() !== "DELETE" &&
+                    deleteConfirmInput.trim() !== deleteAppTarget.slug &&
+                    deleteConfirmInput.trim() !== deleteAppTarget.name)
+                }
+                onClick={async () => {
+                  if (!onDeleteApp) return;
+                  setDeletingApp(true);
+                  setDeleteAppError("");
+                  try {
+                    await onDeleteApp(deleteAppTarget.id);
+                    if (selectedApp?.id === deleteAppTarget.id) {
+                      setSelectedApp(null);
+                    }
+                    setDeleteAppTarget(null);
+                  } catch (err: any) {
+                    setDeleteAppError(err?.message || "Gagal menghapus aplikasi");
+                  } finally {
+                    setDeletingApp(false);
+                  }
+                }}
+                className="px-4 py-2.5 text-xs font-bold rounded-xl bg-red-600 hover:bg-red-700 text-white transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-md"
+              >
+                {deletingApp ? "Menghapus..." : "Hapus Permanen"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+

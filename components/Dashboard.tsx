@@ -138,7 +138,17 @@ export default function Dashboard({ adminEmail }: DashboardProps) {
     await fetchAllData(true);
   };
 
+  const handleDeleteApp = async (appId: string) => {
+    const res = await fetch(`/api/apps/${appId}`, { method: "DELETE" });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to delete application");
+    }
+    await fetchAllData(true);
+  };
+
   const handleSaveProfile = async (content: string) => {
+
     const res = await fetch("/api/business-profile", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -213,6 +223,7 @@ export default function Dashboard({ adminEmail }: DashboardProps) {
                 onCreateApp={handleCreateApp}
                 onGenerateKey={handleGenerateKey}
                 onRevokeKey={handleRevokeKey}
+                onDeleteApp={handleDeleteApp}
               />
             )}
             {activeTab === 'knowledge' && (

@@ -93,6 +93,8 @@ export default function DataCenterTab({ lang, theme }: DataCenterTabProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [filterSourceType, setFilterSourceType] = useState("all");
   const [filterAppId, setFilterAppId] = useState("all");
+  const [filterReviewRequired, setFilterReviewRequired] = useState("all"); // "all" | "yes" | "no"
+  const [filterDateRange, setFilterDateRange] = useState("all"); // "all" | "7d" | "30d"
   const [activeAppTab, setActiveAppTab] = useState("all"); // "all" | client_app_id | "internal"
   const [showAddForm, setShowAddForm] = useState(false);
 
@@ -247,21 +249,41 @@ export default function DataCenterTab({ lang, theme }: DataCenterTabProps) {
     }
   };
 
-  // Filtered & Grouped — activeAppTab drives app filter
-  const effectiveAppFilter = activeAppTab;
+  // Filtered & Grouped — activeAppTab drives app filter, deep JSON search
+  const effectiveAppFilter = activeAppTab !== "all" ? activeAppTab : filterAppId;
   const filteredRecords = useMemo(() => records.filter(r => {
-    const q = searchQuery.toLowerCase();
-    const matchSearch = !q || (r.document_type || '').toLowerCase().includes(q) ||
+    const q = searchQuery.toLowerCase().trim();
+
+    // Deep search in fields + stringified JSON payload
+    const jsonStr = r.extracted_data ? JSON.stringify(r.extracted_data).toLowerCase() : '';
+    const matchSearch = !q ||
+      (r.document_type || '').toLowerCase().includes(q) ||
       (r.raw_text || '').toLowerCase().includes(q) ||
       (r.tags || []).some(t => t.toLowerCase().includes(q)) ||
       (r.app_name || '').toLowerCase().includes(q) ||
-      (r.field_key || '').toLowerCase().includes(q);
+      (r.field_key || '').toLowerCase().includes(q) ||
+      jsonStr.includes(q);
+
     const matchSource = filterSourceType === 'all' || r.source_type === filterSourceType;
+
     const matchApp = effectiveAppFilter === 'all'
       || r.client_app_id === effectiveAppFilter
       || (effectiveAppFilter === 'internal' && r.client_app_id === null);
-    return matchSearch && matchSource && matchApp;
-  }), [records, searchQuery, filterSourceType, effectiveAppFilter]);
+
+    const matchReview = filterReviewRequired === 'all'
+      || (filterReviewRequired === 'yes' && r.manual_review_required)
+      || (filterReviewRequired === 'no' && !r.manual_review_required);
+
+    let matchDate = true;
+    if (filterDateRange !== 'all') {
+      const recordTime = new Date(r.created_at).getTime();
+      const now = Date.now();
+      const days = filterDateRange === '7d' ? 7 : 30;
+      matchDate = recordTime >= now - days * 24 * 60 * 60 * 1000;
+    }
+
+    return matchSearch && matchSource && matchApp && matchReview && matchDate;
+  }), [records, searchQuery, filterSourceType, effectiveAppFilter, filterReviewRequired, filterDateRange]);
 
   const groups = useMemo(() => groupRecords(filteredRecords), [filteredRecords]);
 
@@ -527,18 +549,18 @@ export default function DataCenterTab({ lang, theme }: DataCenterTabProps) {
         </div>
       )}
 
-      {/* Filters */}
+      {/* Advanced Filters */}
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="flex-1 relative">
           <Search className="absolute left-3.5 top-3 h-4 w-4 text-bento-text-secondary opacity-60" />
           <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
             className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-bento-border bg-bento-surface text-sm text-bento-text-primary focus:border-bento-accent outline-none"
-            placeholder="Cari app, field, teks, tag..." />
+            placeholder="Cari teks, JSON (mis: gender, paspor, user_message), tag, app..." />
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <Filter className="h-4 w-4 text-bento-text-secondary opacity-60 shrink-0" />
           <select value={filterSourceType} onChange={e => setFilterSourceType(e.target.value)}
-            className="px-3 py-2.5 rounded-xl border border-bento-border bg-bento-surface text-sm text-bento-text-primary focus:border-bento-accent outline-none">
+            className="px-3 py-2.5 rounded-xl border border-bento-border bg-bento-surface text-xs font-semibold text-bento-text-primary focus:border-bento-accent outline-none">
             <option value="all">Semua Source</option>
             <option value="ocr_upload">OCR Upload</option>
             <option value="url_scrape">URL Scrape</option>
@@ -547,14 +569,36 @@ export default function DataCenterTab({ lang, theme }: DataCenterTabProps) {
             <option value="chatbot_interaction">Chatbot Interaction</option>
             <option value="content_generation">Content Generation</option>
           </select>
-          <select value={filterAppId} onChange={e => setFilterAppId(e.target.value)}
-            className="px-3 py-2.5 rounded-xl border border-bento-border bg-bento-surface text-sm text-bento-text-primary focus:border-bento-accent outline-none">
-            <option value="all">Semua App</option>
-            <option value="internal">Internal / Global</option>
-            {apps.map(app => <option key={app.id} value={app.id}>{app.name}</option>)}
+          <select value={filterReviewRequired} onChange={e => setFilterReviewRequired(e.target.value)}
+            className="px-3 py-2.5 rounded-xl border border-bento-border bg-bento-surface text-xs font-semibold text-bento-text-primary focus:border-bento-accent outline-none">
+            <option value="all">Status Review (Semua)</option>
+            <option value="yes">⚠️ Butuh Review</option>
+            <option value="no">✅ Tanpa Review</option>
           </select>
+          <select value={filterDateRange} onChange={e => setFilterDateRange(e.target.value)}
+            className="px-3 py-2.5 rounded-xl border border-bento-border bg-bento-surface text-xs font-semibold text-bento-text-primary focus:border-bento-accent outline-none">
+            <option value="all">Semua Waktu</option>
+            <option value="7d">7 Hari Terakhir</option>
+            <option value="30d">30 Hari Terakhir</option>
+          </select>
+          {(searchQuery || filterSourceType !== "all" || filterReviewRequired !== "all" || filterDateRange !== "all" || activeAppTab !== "all") && (
+            <button
+              onClick={() => {
+                setSearchQuery("");
+                setFilterSourceType("all");
+                setFilterAppId("all");
+                setFilterReviewRequired("all");
+                setFilterDateRange("all");
+                setActiveAppTab("all");
+              }}
+              className="px-3 py-2.5 rounded-xl border border-red-500/30 bg-red-500/10 text-red-400 text-xs font-bold hover:bg-red-500/20 transition-all"
+            >
+              Reset Filter
+            </button>
+          )}
         </div>
       </div>
+
 
       {/* Card Grid */}
       {loading ? (
