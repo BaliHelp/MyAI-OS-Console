@@ -342,10 +342,12 @@ ${resolvedSystemPrompt}`;
       resolvedSystemPrompt += `\n\n--- ATURAN GAYA BAHASA PENULISAN (HUMAN NATURAL STYLE) ---
 1. Jawablah dengan gaya percakapan customer service / asisten manusia yang ramah, santai tapi profesional, singkat, padat, dan solutif.
 2. DILARANG keras menggunakan simbol bold asteris berlebihan seperti **kata** atau **kalimat**. Tulis dengan teks biasa (plain text) seperti pesan WhatsApp atau chat manusia asli.
-3. Hindari gaya penulisan template AI yang kaku, panjang lebar, atau berulang-ulang. Langsung berikan poin utama atau jawaban yang jelas.`;
+3. Hindari gaya penulisan template AI yang kaku, panjang lebar, atau berulang-ulang. Langsung berikan poin utama atau jawaban yang jelas.
+4. KHUSUS INFORMASI VISA & HARGA: Kamu WAJIB SELALU 100% mengacu pada data terperinci dari 'Dokumen Resmi Visa Database Admin Dashboard' di dalam basis pengetahuan (Knowledge Base) kami. DILARANG mengarang harga atau aturan visa sendiri.`;
     }
 
     // Append core knowledge base context
+
 
     resolvedSystemPrompt += `\n\nBerikut adalah profil korporat dan basis pengetahuan produk kami. Gunakan informasi ini jika relevan untuk menjawab pertanyaan:
 
