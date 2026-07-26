@@ -93,6 +93,7 @@ export default function DataCenterTab({ lang, theme }: DataCenterTabProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [filterSourceType, setFilterSourceType] = useState("all");
   const [filterAppId, setFilterAppId] = useState("all");
+  const [activeAppTab, setActiveAppTab] = useState("all"); // "all" | client_app_id | "internal"
   const [showAddForm, setShowAddForm] = useState(false);
 
   // Popup state
@@ -245,7 +246,8 @@ export default function DataCenterTab({ lang, theme }: DataCenterTabProps) {
     }
   };
 
-  // Filtered & Grouped
+  // Filtered & Grouped — activeAppTab drives app filter
+  const effectiveAppFilter = activeAppTab;
   const filteredRecords = useMemo(() => records.filter(r => {
     const q = searchQuery.toLowerCase();
     const matchSearch = !q || (r.document_type || '').toLowerCase().includes(q) ||
@@ -254,11 +256,29 @@ export default function DataCenterTab({ lang, theme }: DataCenterTabProps) {
       (r.app_name || '').toLowerCase().includes(q) ||
       (r.field_key || '').toLowerCase().includes(q);
     const matchSource = filterSourceType === 'all' || r.source_type === filterSourceType;
-    const matchApp = filterAppId === 'all' || r.client_app_id === filterAppId || (filterAppId === 'internal' && r.client_app_id === null);
+    const matchApp = effectiveAppFilter === 'all'
+      || r.client_app_id === effectiveAppFilter
+      || (effectiveAppFilter === 'internal' && r.client_app_id === null);
     return matchSearch && matchSource && matchApp;
-  }), [records, searchQuery, filterSourceType, filterAppId]);
+  }), [records, searchQuery, filterSourceType, effectiveAppFilter]);
 
   const groups = useMemo(() => groupRecords(filteredRecords), [filteredRecords]);
+
+  // Per-app counts for tab badges
+  const appTabCounts = useMemo(() => {
+    const counts: Record<string, number> = { all: records.length, internal: 0 };
+    records.forEach(r => {
+      if (!r.client_app_id) { counts['internal'] = (counts['internal'] || 0) + 1; }
+      else { counts[r.client_app_id] = (counts[r.client_app_id] || 0) + 1; }
+    });
+    return counts;
+  }, [records]);
+
+  // Build tab list from registered apps that have at least 1 record OR are known client apps
+  const appTabs = useMemo(() => {
+    const tabApps = apps.filter(a => (appTabCounts[a.id] || 0) > 0 || records.length === 0);
+    return tabApps;
+  }, [apps, appTabCounts, records.length]);
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -273,17 +293,86 @@ export default function DataCenterTab({ lang, theme }: DataCenterTabProps) {
             Repositori data persisten — {records.length} record dari {groups.length} grup klien/field
           </p>
         </div>
-        <div className="flex gap-2">
+      {/* App Source Tabs */}
+      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-thin scrollbar-thumb-bento-border">
+        {/* All tab */}
+        <button
+          onClick={() => setActiveAppTab("all")}
+          className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all border ${
+            activeAppTab === "all"
+              ? "bg-bento-accent text-white border-bento-accent shadow-sm"
+              : "bg-bento-surface border-bento-border text-bento-text-secondary hover:text-bento-text-primary hover:border-bento-accent/40"
+          }`}
+        >
+          <Database className="h-3.5 w-3.5" />
+          Semua
+          <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-black ${
+            activeAppTab === "all" ? "bg-white/20 text-white" : "bg-bento-surface-lighter text-bento-text-secondary"
+          }`}>{appTabCounts["all"] || 0}</span>
+        </button>
+
+        {/* One tab per client app */}
+        {appTabs.map(app => {
+          const APP_ICONS: Record<string, string> = {
+            "indonesian-visas": "🇮🇩",
+            "tropic-tech": "🌴",
+            "myai-chat": "💬",
+            "myai-master": "🧠",
+            "mybusiness-appstore": "📱",
+            "mybusiness-playstore": "▶️",
+            "mybusiness-website": "🌐",
+          };
+          const icon = APP_ICONS[app.slug] || "📦";
+          const isActive = activeAppTab === app.id;
+          return (
+            <button
+              key={app.id}
+              onClick={() => setActiveAppTab(app.id)}
+              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all border ${
+                isActive
+                  ? "bg-bento-accent text-white border-bento-accent shadow-sm"
+                  : "bg-bento-surface border-bento-border text-bento-text-secondary hover:text-bento-text-primary hover:border-bento-accent/40"
+              }`}
+            >
+              <span>{icon}</span>
+              {app.name}
+              <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-black ${
+                isActive ? "bg-white/20 text-white" : "bg-bento-surface-lighter text-bento-text-secondary"
+              }`}>{appTabCounts[app.id] || 0}</span>
+            </button>
+          );
+        })}
+
+        {/* Internal tab if there are internal records */}
+        {(appTabCounts["internal"] || 0) > 0 && (
+          <button
+            onClick={() => setActiveAppTab("internal")}
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all border ${
+              activeAppTab === "internal"
+                ? "bg-bento-accent text-white border-bento-accent shadow-sm"
+                : "bg-bento-surface border-bento-border text-bento-text-secondary hover:text-bento-text-primary hover:border-bento-accent/40"
+            }`}
+          >
+            ⚙️ Internal / Manual
+            <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-black ${
+              activeAppTab === "internal" ? "bg-white/20 text-white" : "bg-bento-surface-lighter text-bento-text-secondary"
+            }`}>{appTabCounts["internal"] || 0}</span>
+          </button>
+        )}
+      </div>
+
+      {/* Action buttons */}
+      <div className="flex gap-2 flex-wrap">
           <button
             onClick={() => { setShowOcrScan(!showOcrScan); setShowAddForm(false); }}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-500 text-white font-semibold text-sm hover:bg-emerald-600 transition-colors shadow-sm self-start"
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-500 text-white font-semibold text-sm hover:bg-emerald-600 transition-colors shadow-sm"
           >
             <ScanLine className="h-4 w-4" />
             OCR Scan
           </button>
           <button
             onClick={() => { setShowAddForm(!showAddForm); setShowOcrScan(false); }}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-bento-accent text-white font-semibold text-sm hover:bg-bento-accent/90 transition-colors shadow-sm self-start"
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-bento-accent text-white font-semibold text-sm hover:bg-bento-accent/90 transition-colors shadow-sm"
           >
             <Plus className="h-4 w-4" />
             {lang === 'id' ? 'Tambah Dokumen Manual' : 'Add Manual Document'}
