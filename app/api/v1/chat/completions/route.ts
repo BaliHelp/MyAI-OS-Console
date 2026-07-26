@@ -712,28 +712,91 @@ ${prompt}`;
       }
     }
 
-    // 9. Log non-OCR AI interactions to Data Center (chatbot, content, etc.)
+    // 9. Log ALL non-OCR AI interactions to Data Center with COMPLETE data
+    //    (chatbot, content, reasoning, structured extraction, etc.)
     if (supabaseAdmin && !fieldSpec?.output_schema) {
-      const isChatbot = fieldKey.startsWith("chatbot_") || fieldKey === "chatbot";
-      const isContent = fieldKey.startsWith("content_");
-      if (isChatbot || isContent) {
+      const isChatbot    = fieldKey.startsWith("chatbot_") || fieldKey === "chatbot";
+      const isContent    = fieldKey.startsWith("content_");
+      const isReasoning  = fieldKey === "reasoning_general";
+      const isStructured = fieldKey === "structured_extraction";
+
+      if (isChatbot || isContent || isReasoning || isStructured) {
         try {
           const { saveToDataCenter } = require("@/lib/data-center");
+
+          // Full messages array (all turns in the conversation)
+          const allMessages: Array<{ role: string; content: string }> = [];
+          if (body.messages && Array.isArray(body.messages)) {
+            body.messages.forEach((m: any) => {
+              if (m.role !== "system" && typeof m.content === "string") {
+                allMessages.push({ role: m.role, content: m.content });
+              }
+            });
+          } else {
+            allMessages.push({ role: "user", content: prompt });
+          }
+          // Append the AI response as final turn
+          allMessages.push({ role: "assistant", content: aiResponseText });
+
+          // Human-readable transcript for quick review
+          const transcript = allMessages
+            .map(m => `[${m.role.toUpperCase()}] ${m.content}`)
+            .join("\n---\n");
+
+          // Provider display name (shows full label like "GPT Key 3", "Gemini Key 2", etc.)
+          const PROVIDER_DISPLAY: Record<string, string> = {
+            gemini:  "Gemini",
+            gpt:     "OpenAI GPT",
+            claude:  "Anthropic Claude",
+            deepseek:"DeepSeek",
+            grok:    "Grok (xAI)",
+            glm:     "GLM (Zhipu AI)",
+            kimi:    "Kimi (Moonshot AI)",
+            openrouter: "OpenRouter",
+          };
+
           await saveToDataCenter({
             client_app_id: keyData.client_app_id,
             field_key: fieldKey,
             source_type: isChatbot ? "chatbot_interaction" : "content_generation",
-            extracted_data: {},
-            raw_text: [
-              `[PROMPT] ${prompt.substring(0, 500)}`,
-              `[RESPONSE] ${aiResponseText.substring(0, 1000)}`
-            ].join("\n---\n"),
+            raw_text: transcript,
+            language: "auto",
+            tags: [
+              fieldKey,
+              providerUsed,
+              appName,
+              isChatbot ? "chat" : isContent ? "content" : isReasoning ? "reasoning" : "structured",
+            ],
+            extracted_data: {
+              // ── Identity ─────────────────────────────────────────────────
+              source_app:        appName,
+              client_app_id:     keyData.client_app_id,
+              field_key:         fieldKey,
+              // ── Provider ─────────────────────────────────────────────────
+              provider:          providerUsed,
+              provider_display:  PROVIDER_DISPLAY[providerUsed] || providerUsed,
+              key_label:         selectedKeyLabel,       // e.g. "GPT Key 3"
+              tier_used:         tierUsed,
+              // ── Conversation ─────────────────────────────────────────────
+              messages:          allMessages,            // full turn-by-turn history
+              turn_count:        allMessages.length,
+              user_message:      prompt.substring(0, 2000),
+              ai_response:       aiResponseText.substring(0, 4000),
+              // ── Performance ──────────────────────────────────────────────
+              prompt_tokens:     promptTokens,
+              completion_tokens: completionTokens,
+              total_tokens:      totalTokens,
+              latency_ms:        latencyMs,
+              // ── Timestamp ────────────────────────────────────────────────
+              processed_at:      new Date().toISOString(),
+            },
           });
         } catch (e) {
           console.warn("[gateway] Failed to log AI interaction to Data Center:", e);
         }
       }
     }
+
 
 
     return NextResponse.json({

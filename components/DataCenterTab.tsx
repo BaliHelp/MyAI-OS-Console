@@ -98,6 +98,7 @@ export default function DataCenterTab({ lang, theme }: DataCenterTabProps) {
 
   // Popup state
   const [selectedGroup, setSelectedGroup] = useState<{ key: GroupKey; records: DataCenterRecord[] } | null>(null);
+  const [selectedChatRecord, setSelectedChatRecord] = useState<DataCenterRecord | null>(null);
 
   // Form state
   const [formText, setFormText] = useState("");
@@ -707,15 +708,64 @@ export default function DataCenterTab({ lang, theme }: DataCenterTabProps) {
                     </div>
                   )}
 
-                  {/* Extracted data */}
-                  {rec.extracted_data && Object.keys(rec.extracted_data).length > 0 && (
-                    <div>
-                      <p className="text-[10px] font-bold text-bento-text-secondary uppercase tracking-wider mb-1">Data Terstruktur</p>
-                      <pre className="text-[10px] font-mono bg-bento-surface-lighter rounded-xl p-3 overflow-x-auto text-bento-text-primary max-h-40">
-                        {JSON.stringify(rec.extracted_data, null, 2)}
-                      </pre>
-                    </div>
-                  )}
+                  {/* Extracted data — chat records get bubble view, others get JSON */}
+                  {rec.extracted_data && Object.keys(rec.extracted_data).length > 0 && (() => {
+                    const isChatRec = rec.source_type === 'chatbot_interaction' || rec.source_type === 'content_generation';
+                    const ext = rec.extracted_data;
+                    if (isChatRec && Array.isArray(ext.messages)) {
+                      return (
+                        <div>
+                          {/* Provider / Key identity */}
+                          <div className="flex flex-wrap gap-2 mb-2">
+                            {ext.provider_display && (
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-500/10 border border-purple-500/20 text-purple-400">
+                                🤖 {ext.provider_display}
+                              </span>
+                            )}
+                            {ext.key_label && (
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-bento-surface-lighter border border-bento-border text-bento-text-secondary">
+                                🔑 {ext.key_label}
+                              </span>
+                            )}
+                            {ext.tier_used && (
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-500/10 border border-sky-500/20 text-sky-400">
+                                Tier {ext.tier_used}
+                              </span>
+                            )}
+                            {ext.total_tokens && (
+                              <span className="text-[10px] px-2 py-0.5 rounded-full bg-bento-surface-lighter border border-bento-border text-bento-text-secondary">
+                                {ext.total_tokens} tokens
+                              </span>
+                            )}
+                          </div>
+                          {/* Last 2 messages preview */}
+                          <div className="space-y-1.5 max-h-32 overflow-y-auto">
+                            {ext.messages.slice(-3).map((m: any, i: number) => (
+                              <div key={i} className={`text-[10px] px-2.5 py-1.5 rounded-xl ${m.role === 'user' ? 'bg-bento-accent/10 text-bento-text-primary ml-4' : 'bg-bento-surface-lighter text-bento-text-secondary mr-4'}`}>
+                                <span className="font-bold text-[9px] uppercase opacity-60 mr-1">{m.role}:</span>
+                                {String(m.content || '').slice(0, 150)}{String(m.content || '').length > 150 ? '…' : ''}
+                              </div>
+                            ))}
+                          </div>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setSelectedChatRecord(rec); }}
+                            className="mt-2 text-[10px] font-bold text-bento-accent hover:underline flex items-center gap-1"
+                          >
+                            <Eye className="h-3 w-3" /> Lihat percakapan lengkap
+                          </button>
+                        </div>
+                      );
+                    }
+                    return (
+                      <div>
+                        <p className="text-[10px] font-bold text-bento-text-secondary uppercase tracking-wider mb-1">Data Terstruktur</p>
+                        <pre className="text-[10px] font-mono bg-bento-surface-lighter rounded-xl p-3 overflow-x-auto text-bento-text-primary max-h-40">
+                          {JSON.stringify(rec.extracted_data, null, 2)}
+                        </pre>
+                      </div>
+                    );
+                  })()}
+
 
                   {/* Tags */}
                   {(rec.tags || []).length > 0 && (
@@ -731,6 +781,102 @@ export default function DataCenterTab({ lang, theme }: DataCenterTabProps) {
           </div>
         </div>
       )}
+
+      {/* ── Chat AI Full Transcript Modal ───────────────────────────────────── */}
+      {selectedChatRecord && (() => {
+        const ext = selectedChatRecord.extracted_data || {};
+        const msgs: Array<{ role: string; content: string }> = Array.isArray(ext.messages) ? ext.messages : [];
+        return (
+          <div
+            className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"
+            onClick={() => setSelectedChatRecord(null)}
+          >
+            <div
+              className="w-full max-w-2xl max-h-[90vh] flex flex-col rounded-2xl border border-bento-border bg-bento-bg shadow-2xl overflow-hidden"
+              onClick={e => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="px-5 py-4 border-b border-bento-border flex items-start justify-between gap-3 shrink-0">
+                <div>
+                  <h3 className="text-base font-extrabold text-bento-text-primary flex items-center gap-2">
+                    💬 Chat AI Transcript
+                  </h3>
+                  <div className="flex flex-wrap gap-1.5 mt-1.5">
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-bento-accent/10 border border-bento-accent/20 text-bento-accent">
+                      {ext.source_app || selectedChatRecord.app_name || 'Unknown App'}
+                    </span>
+                    {ext.provider_display && (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-500/10 border border-purple-500/20 text-purple-400">
+                        🤖 {ext.provider_display}
+                      </span>
+                    )}
+                    {ext.key_label && (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-bento-surface-lighter border border-bento-border text-bento-text-secondary">
+                        🔑 {ext.key_label}
+                      </span>
+                    )}
+                    {ext.field_key && (
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-bento-surface-lighter border border-bento-border text-bento-text-secondary">
+                        field: {ext.field_key}
+                      </span>
+                    )}
+                  </div>
+                  {/* Metrics row */}
+                  <div className="flex flex-wrap gap-3 mt-2 text-[10px] text-bento-text-secondary">
+                    {ext.tier_used && <span>Tier {ext.tier_used}</span>}
+                    {ext.total_tokens && <span>{ext.total_tokens} tokens ({ext.prompt_tokens}↑ {ext.completion_tokens}↓)</span>}
+                    {ext.latency_ms && <span>{ext.latency_ms}ms</span>}
+                    <span>{formatDateTime(selectedChatRecord.created_at, lang)}</span>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setSelectedChatRecord(null)}
+                  className="p-1.5 rounded-lg hover:bg-bento-surface-lighter text-bento-text-secondary transition-colors shrink-0"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              {/* Conversation Bubbles */}
+              <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
+                {msgs.length === 0 ? (
+                  <p className="text-xs text-center text-bento-text-secondary opacity-60 py-8">Tidak ada pesan.</p>
+                ) : msgs.map((m, i) => (
+                  <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-xs ${
+                      m.role === 'user'
+                        ? 'bg-bento-accent text-white rounded-br-md'
+                        : m.role === 'assistant'
+                        ? 'bg-bento-surface border border-bento-border text-bento-text-primary rounded-bl-md'
+                        : 'bg-amber-500/10 border border-amber-500/20 text-amber-300 rounded-bl-md text-[10px]'
+                    }`}>
+                      <p className="text-[9px] font-bold uppercase opacity-60 mb-1">
+                        {m.role === 'user' ? '👤 User' : m.role === 'assistant' ? `🤖 ${ext.provider_display || 'AI'}` : '⚙️ System'}
+                      </p>
+                      <p className="whitespace-pre-wrap leading-relaxed">{m.content}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Footer with download */}
+              <div className="px-5 py-3 border-t border-bento-border flex justify-between items-center shrink-0">
+                <span className="text-[10px] text-bento-text-secondary">{msgs.length} pesan · ID: {selectedChatRecord.id.slice(0, 8)}…</span>
+                <button
+                  onClick={() => downloadBlob(
+                    JSON.stringify({ id: selectedChatRecord.id, ...ext, created_at: selectedChatRecord.created_at }, null, 2),
+                    `chat_${selectedChatRecord.id.slice(0,8)}_${Date.now()}.json`,
+                    'application/json'
+                  )}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-bento-border text-[10px] font-bold text-bento-text-secondary hover:text-bento-text-primary hover:bg-bento-surface-lighter transition-all"
+                >
+                  <Download className="h-3 w-3" /> Export JSON
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
