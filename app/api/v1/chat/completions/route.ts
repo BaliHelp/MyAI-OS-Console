@@ -331,14 +331,22 @@ ${resolvedSystemPrompt}`;
     // This leaves chat/reasoning/coding/content/structured_extraction free to take a caller voice.
     const fieldHasStrictSchema = !!(fieldSpec && fieldSpec.output_schema);
     if (callerSystemPrompt && !CHAT_FIELDS.includes(fieldKey) && !fieldHasStrictSchema) {
-      resolvedSystemPrompt = `--- CALLER INSTRUCTIONS ---
-${callerSystemPrompt}
---- TASK INSTRUCTIONS ---
-${resolvedSystemPrompt}`;
+      resolvedSystemPrompt = `--- CALLER INSTRUCTIONS ---\n${callerSystemPrompt}\n--- TASK INSTRUCTIONS ---\n${resolvedSystemPrompt}`;
       console.log(`[gateway] Honored caller system prompt for field '${fieldKey}' (${callerSystemPrompt.length} chars)`);
     }
 
+
+    // 4c-ter. Enforce Natural Human Tone & prohibit bold asterisks (**) for all chatbot fields
+    const isChatbotField = fieldKey.startsWith("chatbot") || fieldKey === "chatbot" || fieldKey === "chatbot_general" || fieldKey === "chatbot_myai_home";
+    if (isChatbotField) {
+      resolvedSystemPrompt += `\n\n--- ATURAN GAYA BAHASA PENULISAN (HUMAN NATURAL STYLE) ---
+1. Jawablah dengan gaya percakapan customer service / asisten manusia yang ramah, santai tapi profesional, singkat, padat, dan solutif.
+2. DILARANG keras menggunakan simbol bold asteris berlebihan seperti **kata** atau **kalimat**. Tulis dengan teks biasa (plain text) seperti pesan WhatsApp atau chat manusia asli.
+3. Hindari gaya penulisan template AI yang kaku, panjang lebar, atau berulang-ulang. Langsung berikan poin utama atau jawaban yang jelas.`;
+    }
+
     // Append core knowledge base context
+
     resolvedSystemPrompt += `\n\nBerikut adalah profil korporat dan basis pengetahuan produk kami. Gunakan informasi ini jika relevan untuk menjawab pertanyaan:
 
 Business Profile Context:
