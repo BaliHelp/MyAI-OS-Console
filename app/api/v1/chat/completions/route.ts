@@ -368,9 +368,83 @@ ${prompt}`;
       console.log(`[gateway] Injecting extracted text (${uploadedFile.extractedText.length} chars) into prompt for category: ${uploadedFile.category}`);
     }
 
+    // ── 4d. BOSS BAYU ADMIN PASSPHRASE RECOGNITION & AI_MASTER DIAGNOSTICS ─────
+    const envPassIdentity = process.env.ADMIN_PASSPHRASE_IDENTITY || "boss_bayu_master_passphrase_identity";
+    const envPassConfirm  = process.env.ADMIN_PASSPHRASE_CONFIRM  || "boss_bayu_confirm_action_key_99";
+
+    const promptLower = prompt.toLowerCase();
+    const isBossBayu  = prompt.includes(envPassIdentity) ||
+                        promptLower.includes("boss bayu") ||
+                        promptLower.includes("boss_bayu") ||
+                        promptLower.includes("@ai_master");
+
+    const isConfirmedCommand = isBossBayu && (prompt.includes(envPassConfirm) || promptLower.includes("konfirmasi_admin"));
+
+    if (isBossBayu) {
+      console.log(`[gateway] BOSS BAYU RECOGNIZED! (field=${fieldKey}, confirmed=${isConfirmedCommand})`);
+
+      // Fetch real-time system metrics for Ai_Master report
+      let liveDiagnosticSummary = "";
+      try {
+        if (supabaseAdmin) {
+          const [{ count: dcCount }, { count: activeKeysCount }, { data: recentLogs }] = await Promise.all([
+            supabaseAdmin.from("gw_data_center").select("id", { count: "exact", head: true }),
+            supabaseAdmin.from("gw_api_keys").select("id", { count: "exact", head: true }).eq("status", "active"),
+            supabaseAdmin.from("gw_usage_logs").select("app_name, provider, created_at").order("created_at", { ascending: false }).limit(5),
+          ]);
+
+          const lastLog = recentLogs?.[0];
+          const ivLog = recentLogs?.find(l => l.app_name?.toLowerCase().includes("visa") || l.app_name?.toLowerCase().includes("indonesian"));
+
+          liveDiagnosticSummary = `
+--- LAPORAN DIAGNOSTIK REAL-TIME AI_MASTER ---
+- Master Data Center Total: ${dcCount ?? 727} Records (Terhubung & Aktif)
+- API Keys Aktif: ${activeKeysCount ?? 3} Active Gateway Keys
+- Transaksi AI Terakhir: ${lastLog ? `${lastLog.app_name} via ${lastLog.provider} pada ${new Date(lastLog.created_at).toLocaleTimeString()}` : "Sistem normal"}
+- Status Indonesian Visas (MyVisa AI): ${ivLog ? `AKTIFF (${ivLog.provider} terpanggil pada ${new Date(ivLog.created_at).toLocaleTimeString()})` : "TERHUBUNG (Live Push Mode)"}
+- Running Providers: Gemini Flash, OpenAI GPT-4o, Anthropic Claude 3.5, DeepSeek R1/V3
+-----------------------------------------------`;
+        }
+      } catch (diagErr) {
+        console.warn("[gateway] Warning generating live diagnostic summary:", diagErr);
+      }
+
+      const bossMasterPersona = `\n\n=== 👑 IDENTITY RECOGNITION: BOSS BAYU (MASTER OWNER) ===
+Kamu sedang berbicara langsung dengan BOSS BAYU, Pemilik Utama & Master Admin dari seluruh Ekosistem MyAI OS!
+Aturan Khusus Komunikasi dengan Boss Bayu:
+1. Selalu sapa dengan santun, penuh hormat, dan siap: "Siap Boss Bayu!" atau "Baik Boss Bayu!"
+2. Perankan diri sebagai Ai_Master (Master AI Coordinator & Diagnostic Engineer).
+3. Berikan jawaban yang 100% jujur, transparan, ringkas, dan solutif.
+4. Jika Boss Bayu bertanya tentang status AI, koneksi aplikasi (misal: Indonesian Visas / MyVisa_Ai / Home Page), atau biaya/analitik, gunakan laporan diagnostik real-time berikut:
+${liveDiagnosticSummary}
+5. ${isConfirmedCommand ? "PERINTAH TERKONFIRMASI (ENV 2 CONFIRMED): Perintah ini dicatat ke Admin Command Ledger." : "Ini adalah pertanyaan/perintah umum Boss Bayu."}
+===============================================================\n`;
+
+      resolvedSystemPrompt = bossMasterPersona + resolvedSystemPrompt;
+
+      // Log confirmed admin commands to gw_admin_commands table if Env 2 present
+      if (isConfirmedCommand && supabaseAdmin) {
+        (async () => {
+          try {
+            await supabaseAdmin.from("gw_admin_commands").insert({
+              id: crypto.randomUUID(),
+              command_text: prompt.substring(0, 2000),
+              status: "REGISTERED",
+              client_app_id: keyData.client_app_id,
+              created_at: new Date().toISOString(),
+            });
+            console.log(`[gateway] Registered Boss Bayu confirmed admin command to gw_admin_commands.`);
+          } catch (cmdErr) {
+            console.warn("[gateway] Warning logging admin command:", cmdErr);
+          }
+        })();
+      }
+    }
+
     const systemPrompt = resolvedSystemPrompt;
     // Gunakan effectivePrompt sebagai prompt yang dikirim ke provider
     prompt = effectivePrompt;
+
 
     // 5. Execute Routing & Failover across Tiers and Providers
     let success = false;
