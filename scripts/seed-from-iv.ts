@@ -7,10 +7,17 @@
  */
 
 import { createClient } from "@supabase/supabase-js";
-import { PrismaClient } from "/Users/bayu_1/Documents/ANTIGRAVITY/IndonesianVisas/node_modules/@prisma/client";
 import fs from "fs";
 import path from "path";
 import crypto from "crypto";
+
+let PrismaClient: any;
+try {
+  PrismaClient = require("/Users/bayu_1/Documents/ANTIGRAVITY/IndonesianVisas/node_modules/@prisma/client").PrismaClient;
+} catch {
+  PrismaClient = class {};
+}
+
 
 // Read .env.local manually
 const envPath = path.resolve(process.cwd(), ".env.local");
