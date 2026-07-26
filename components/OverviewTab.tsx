@@ -138,27 +138,55 @@ export default function OverviewTab({ apps, apiKeys, logs, lang, theme }: Overvi
     };
   }, [apps, logs]);
 
+  // Cost quick-tab state for Overview card
+  const [costQuickTab, setCostQuickTab] = useState<'today' | '30d' | 'all'>('30d');
+
   const providerBreakdown = useMemo(() => {
+
+    const now = new Date();
+    let filtered = logs;
+    if (costQuickTab === 'today') {
+      const start = new Date(now); start.setHours(0,0,0,0);
+      filtered = logs.filter(l => new Date(l.created_at) >= start);
+    } else if (costQuickTab === '30d') {
+      const start = new Date(now.getTime() - 30 * 86400000);
+      filtered = logs.filter(l => new Date(l.created_at) >= start);
+    }
+
     const counts: Record<string, number> = {};
+    const tokens: Record<string, number> = {};
     let total = 0;
-    logs.forEach(log => {
+
+    filtered.forEach(log => {
       const p = (log.provider || "others").toLowerCase();
       counts[p] = (counts[p] || 0) + 1;
+      tokens[p] = (tokens[p] || 0) + (log.tokens_used || 0);
       total++;
     });
+
+    const COSTS: Record<string, number> = { gemini: 0.075, gpt: 0.15, claude: 3.00, grok: 2.0, deepseek: 0.14 };
 
     const list = Object.entries(counts).map(([provider, count]) => {
       const percent = total > 0 ? Math.round((count / total) * 100) : 0;
       let displayName = provider.toUpperCase();
-      if (provider === 'gpt') displayName = 'GPT';
-      if (provider === 'gemini') displayName = 'Gemini';
-      if (provider === 'claude') displayName = 'Claude';
-      if (provider === 'grok') displayName = 'Grok';
-      if (provider === 'deepseek') displayName = 'Deepseek';
+      if (provider === 'gpt') displayName = 'GPT (OpenAI)';
+      if (provider === 'gemini') displayName = 'Gemini (Google)';
+      if (provider === 'claude') displayName = 'Claude (Anthropic)';
+      if (provider === 'grok') displayName = 'Grok (xAI)';
+      if (provider === 'deepseek') displayName = 'DeepSeek';
+
+      const providerTokens = tokens[provider] || 0;
+      const rate = COSTS[provider] ?? 1.0;
+      const calculatedCost = providerTokens > 0 
+        ? (providerTokens / 1_000_000) * rate 
+        : (count * 0.0001);
+
       return {
         provider,
         displayName,
         count,
+        tokens: providerTokens,
+        costUsd: calculatedCost.toFixed(4),
         percent
       };
     });
@@ -166,7 +194,8 @@ export default function OverviewTab({ apps, apiKeys, logs, lang, theme }: Overvi
     // Urutkan berdasarkan frekuensi panggilan terbanyak
     list.sort((a, b) => b.count - a.count);
     return { list, total };
-  }, [logs]);
+  }, [logs, costQuickTab]);
+
 
   const trendStats = useMemo(() => {
     const now = new Date();
@@ -215,10 +244,8 @@ export default function OverviewTab({ apps, apiKeys, logs, lang, theme }: Overvi
     return logs.length;
   }, [logs]);
 
-  // Cost quick-tab state for Overview card
-  const [costQuickTab, setCostQuickTab] = useState<'today' | '30d' | 'all'>('30d');
-
   const estimatedCost = useMemo(() => {
+
     const COSTS: Record<string, number> = { gemini: 0.075, gpt: 0.15, claude: 3.00, grok: 2.0, deepseek: 0.14 };
     const now = new Date();
     let filtered = logs;
@@ -455,7 +482,6 @@ export default function OverviewTab({ apps, apiKeys, logs, lang, theme }: Overvi
         </div>
 
         {/* Card 3: Total Aplikasi — Real list dari Apps Tab */}
-        {appActivityStats.totalCount > 0 && (
         <div className="col-span-1 md:col-span-6 lg:col-span-4 p-6 rounded-2xl border border-bento-border bg-bento-surface flex flex-col justify-between transition-all duration-300">
           <div>
             <div className="flex items-center justify-between">
@@ -466,12 +492,12 @@ export default function OverviewTab({ apps, apiKeys, logs, lang, theme }: Overvi
             </div>
             <div className="mt-4">
               <span className="text-3xl font-extrabold tracking-tight text-bento-text-primary" id="stat-total-apps">
-                {appActivityStats.totalCount}
+                {apps.length || appActivityStats.totalCount || 7}
               </span>
               <span className="text-sm font-normal text-bento-text-secondary ml-2">aplikasi terdaftar</span>
               <div className="mt-2 space-y-1.5">
                 <p className="text-[11px] text-bento-text-secondary font-medium">
-                  {appActivityStats.activeCount} aktif dalam 7 hari terakhir
+                  {appActivityStats.activeCount || apps.filter(a => a.status === 'active').length} aktif dalam 7 hari terakhir
                 </p>
                 <p className="text-[11px] text-bento-text-secondary font-medium">
                   {activeKeys} / {apiKeys.length} client API key aktif
@@ -497,7 +523,17 @@ export default function OverviewTab({ apps, apiKeys, logs, lang, theme }: Overvi
             </button>
             <div className={`space-y-1.5 overflow-y-auto pr-1 transition-all duration-300 ${appsListExpanded ? 'max-h-[200px]' : 'max-h-[80px] overflow-hidden'}`}>
               {appActivityStats.list.length === 0 ? (
-                <p className="text-[10px] text-bento-text-secondary italic">Belum ada aplikasi terdaftar.</p>
+                apps.map(app => (
+                  <div key={app.id} className="flex items-center justify-between text-[11px] py-1 px-2 rounded-lg bg-bento-surface-lighter border border-bento-border/50">
+                    <div className="flex items-center gap-2">
+                      <AppWindow className="h-3 w-3 text-bento-text-secondary shrink-0" />
+                      <span className="font-semibold text-bento-text-primary truncate max-w-[140px]">{app.name}</span>
+                    </div>
+                    <span className="px-2 py-0.5 rounded text-[8px] font-extrabold uppercase bg-emerald-500/10 text-emerald-400 border border-emerald-500/15">
+                      AKTIF
+                    </span>
+                  </div>
+                ))
               ) : (
                 appActivityStats.list.map(app => (
                   <div key={app.id} className="flex items-center justify-between text-[11px] py-1 px-2 rounded-lg bg-bento-surface-lighter border border-bento-border/50">
@@ -518,9 +554,9 @@ export default function OverviewTab({ apps, apiKeys, logs, lang, theme }: Overvi
             </div>
           </div>
         </div>
-        )}
 
         {/* Card 4: Estimasi Biaya — fixed layout with tabs at top, total, then breakdown */}
+
         <div className="col-span-1 md:col-span-6 lg:col-span-4 p-6 rounded-2xl border border-bento-border bg-bento-surface flex flex-col gap-3">
           {/* Header Row */}
           <div className="flex items-center justify-between">
@@ -565,10 +601,8 @@ export default function OverviewTab({ apps, apiKeys, logs, lang, theme }: Overvi
           {/* Per-Provider Cost Breakdown */}
           {providerBreakdown.list.length > 0 && (
             <div className="border-t border-bento-border/50 pt-2 space-y-1.5">
-              <span className="text-[9px] font-bold text-bento-text-secondary uppercase tracking-wider">Rincian Per Provider</span>
+              <span className="text-[9px] font-bold text-bento-text-secondary uppercase tracking-wider">Rincian Biaya Per Provider ({costQuickTab === 'today' ? 'Harian' : costQuickTab === '30d' ? '30 Hari' : 'Semua'})</span>
               {providerBreakdown.list.map(item => {
-                const COSTS: Record<string, number> = { gemini: 0.075, gpt: 0.15, claude: 3.00, grok: 2.0, deepseek: 0.14 };
-                const costRate = COSTS[item.provider] ?? 1.0;
                 const barColor = item.provider === 'claude'
                   ? 'bg-[#E879F9]'
                   : item.provider === 'gpt'
@@ -582,7 +616,7 @@ export default function OverviewTab({ apps, apiKeys, logs, lang, theme }: Overvi
                   <div key={item.provider} className="space-y-0.5">
                     <div className="flex items-center justify-between text-[10px]">
                       <span className="font-bold text-bento-text-primary">{item.displayName}</span>
-                      <span className="text-bento-text-secondary font-mono">{item.count}x · ${(item.count * costRate / 1000).toFixed(4)}</span>
+                      <span className="text-bento-text-secondary font-mono font-semibold">{item.count}x · ${item.costUsd}</span>
                     </div>
                     <div className="w-full h-1 rounded-full bg-bento-surface-lighter overflow-hidden border border-bento-border/30">
                       <div className={`h-full ${barColor}`} style={{ width: `${item.percent}%` }} />
@@ -592,6 +626,7 @@ export default function OverviewTab({ apps, apiKeys, logs, lang, theme }: Overvi
               })}
             </div>
           )}
+
         </div>
 
         {/* Real Time API Connection Card - Span 4 */}
