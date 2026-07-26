@@ -345,10 +345,14 @@ export default function DataCenterTab({ lang, theme }: DataCenterTabProps) {
             "tropic-tech": "🌴",
             "myai-chat": "💬",
             "myai-master": "🧠",
+            "myindo-appstore": "📱",
+            "myindo-playstore": "▶️",
+            "myindo-website": "🌐",
             "mybusiness-appstore": "📱",
             "mybusiness-playstore": "▶️",
             "mybusiness-website": "🌐",
           };
+
           const icon = APP_ICONS[app.slug] || "📦";
           const isActive = activeAppTab === app.id;
           return (

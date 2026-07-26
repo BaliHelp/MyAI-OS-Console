@@ -39,19 +39,16 @@ interface MyAIChatWidgetProps {
 const WELCOME_MESSAGE: Message = {
   id: "welcome",
   role: "assistant",
-  content: `Halo! Saya **MyAI** — asisten AI eksklusif Bali Enterprises Group 👋
+  content: `Halo Boss Bayu! Saya **AI Master** — Asisten AI Eksekutif Lingkar Bisnis Anda 👋
 
-Saya adalah Super Manager AI yang siap membantu Anda dengan:
-- 📊 **Analisis data** sistem dan penggunaan API
-- 💼 **Strategi bisnis** & rekomendasi operasional  
-- ✍️ **Pembuatan konten** berkualitas tinggi
-- 📱 **Social media** & marketing insights
-- 🏝️ **Visa & imigrasi Bali** — keahlian mendalam
-- 🤖 **Manajemen sistem** MyAI OS Console
+Saya adalah Super Manager AI yang siap membantu Anda mengelola seluruh ekosistem:
+- 📊 **Analisis Data & Gateway**: Monitor API, token, dan estimasi biaya MyAI OS
+- 🇮🇩 **Indonesian Visas** (\`indonesianvisas.com\`): Visa B211A, VOA, KITAS Investor/Working, Golden Visa & Imigrasi
+- 🌴 **Tropic Tech** (\`tropictech.rent\`): Rental teknologi, gadget, & armada kendaraan digital
+- 📱 **MyIndo.app**: Super-app & marketplace ekosistem Indonesia (domain resmi)
+- 🤝 **Bali Help / Enterprises Group**: Pendirian PT PMA, legalitas bisnis & ekspatriat
 
-Saya sadar waktu, memiliki akses ke seluruh data sistem, dan terus berkembang.
-
-Apa yang bisa saya bantu hari ini?`,
+Apa yang bisa saya jalankan atau laporkan untuk Anda hari ini, Boss Bayu?`,
   timestamp: new Date().toISOString(),
   provider: "system"
 };
@@ -68,10 +65,10 @@ const PROVIDER_COLORS: Record<string, string> = {
 const PROVIDER_LABELS: Record<string, string> = {
   openai: "GPT-4o",
   openai2: "GPT-4o",
-  claude: "Claude",
-  gemini: "Gemini",
+  claude: "Claude 3.5",
+  gemini: "Gemini 1.5",
   error: "Error",
-  system: "MyAI",
+  system: "System",
 };
 
 function formatMessage(text: string): string {
@@ -83,7 +80,7 @@ function formatMessage(text: string): string {
     .replace(/\n/g, '<br />');
 }
 
-export default function MyAIChatWidget({ apps = [], logs = [], apiKeys = [], documents = [], businessProfile = null }: MyAIChatWidgetProps) {
+export default function MyAIChatWidget({ apps = [], logs = [], apiKeys = [], documents = [], businessProfile = {} }: MyAIChatWidgetProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isMaximized, setIsMaximized] = useState(false);
   const [messages, setMessages] = useState<Message[]>([WELCOME_MESSAGE]);
@@ -91,10 +88,14 @@ export default function MyAIChatWidget({ apps = [], logs = [], apiKeys = [], doc
   const [isLoading, setIsLoading] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [hasNewMessage, setHasNewMessage] = useState(false);
-  const [currentProvider, setCurrentProvider] = useState("openai");
+  const [currentProvider, setCurrentProvider] = useState("gemini");
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
 
   // Bali time
   const getBaliTime = () => {
@@ -112,7 +113,7 @@ export default function MyAIChatWidget({ apps = [], logs = [], apiKeys = [], doc
 
   useEffect(() => {
     if (isOpen) {
-      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+      scrollToBottom();
       inputRef.current?.focus();
       setHasNewMessage(false);
     }
@@ -161,7 +162,7 @@ export default function MyAIChatWidget({ apps = [], logs = [], apiKeys = [], doc
         role: "assistant",
         content: data.error ? `❌ ${data.error}` : (data.reply || "Tidak ada respons."),
         timestamp: new Date().toISOString(),
-        provider: data.provider || "openai",
+        provider: data.provider || "gemini",
       };
 
       setMessages(prev => [...prev, assistantMessage]);
@@ -193,7 +194,7 @@ export default function MyAIChatWidget({ apps = [], logs = [], apiKeys = [], doc
     setTimeout(() => setCopiedId(null), 2000);
   };
 
-  const handleClearChat = () => {
+  const handleReset = () => {
     setMessages([WELCOME_MESSAGE]);
   };
 
@@ -219,7 +220,7 @@ export default function MyAIChatWidget({ apps = [], logs = [], apiKeys = [], doc
           {/* Label tooltip */}
           <div className="absolute bottom-0 right-16 hidden group-hover:flex items-center gap-2 bg-bento-surface border border-bento-border rounded-xl px-3 py-1.5 shadow-xl whitespace-nowrap">
             <Sparkles className="h-3.5 w-3.5 text-violet-400" />
-            <span className="text-xs font-bold text-bento-text-primary">MyAI Assistant</span>
+            <span className="text-xs font-bold text-bento-text-primary">AI Master</span>
           </div>
         </button>
       )}
@@ -237,21 +238,22 @@ export default function MyAIChatWidget({ apps = [], logs = [], apiKeys = [], doc
                 <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-400 border-2 border-[#0A0B0D]" />
               </div>
               <div>
-                <h4 className="font-extrabold text-sm text-white leading-none">MyAI</h4>
+                <h4 className="font-extrabold text-sm text-white leading-none">AI Master</h4>
                 <div className="flex items-center gap-1.5 mt-0.5">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                   <span className="text-[9px] text-emerald-400 font-bold uppercase tracking-wider">
-                    Online · {PROVIDER_LABELS[currentProvider] || 'GPT-4o'}
+                    Online · {PROVIDER_LABELS[currentProvider] || 'Gemini 1.5'}
                   </span>
                 </div>
               </div>
             </div>
             <div className="flex items-center gap-1.5">
               <button
-                onClick={handleClearChat}
+                onClick={handleReset}
                 className="p-1.5 rounded-lg text-white/40 hover:text-white hover:bg-white/10 transition-all"
                 title="Hapus percakapan"
               >
+
                 <RefreshCw className="h-3.5 w-3.5" />
               </button>
               <button

@@ -48,7 +48,7 @@ export const translations = {
 
     // Overview Tab
     ovTitle: "Overview Ekosistem",
-    ovSubtitle: "Pantau performa dan alokasi AI di seluruh produk MyBusiness",
+    ovSubtitle: "Pantau performa dan alokasi AI di seluruh ekosistem MyIndo.app",
     cardTotalApps: "Total Aplikasi",
     cardTotalCalls: "Panggilan AI (Bulan Ini)",
     cardActiveKeys: "API Key Aktif",
