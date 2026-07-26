@@ -4,9 +4,11 @@ import { useState, useEffect, useMemo } from "react";
 import {
   Database, Filter, Search, ShieldAlert, FileText, Upload, Plus, ExternalLink,
   Calendar, FileCheck, CheckCircle, X, Download, ChevronDown, ChevronRight, Eye,
-  ScanLine, Camera, Loader2
+  ScanLine, Camera, Loader2, Network
 } from "lucide-react";
+import GraphifyViewer from "./GraphifyViewer";
 import { ClientApp, Language } from "@/lib/types";
+
 
 interface DataCenterRecord {
   id: string;
@@ -98,7 +100,9 @@ export default function DataCenterTab({ lang, theme }: DataCenterTabProps) {
   const [activeAppTab, setActiveAppTab] = useState("all"); // "all" | client_app_id | "internal"
   const [showAddForm, setShowAddForm] = useState(false);
 
-  // Popup state
+  // Graphify Map state
+  const [showGraphViewer, setShowGraphViewer] = useState(false);
+
   const [selectedGroup, setSelectedGroup] = useState<{ key: GroupKey; records: DataCenterRecord[] } | null>(null);
   const [selectedChatRecord, setSelectedChatRecord] = useState<DataCenterRecord | null>(null);
 
@@ -387,6 +391,13 @@ export default function DataCenterTab({ lang, theme }: DataCenterTabProps) {
       {/* Action buttons */}
       <div className="flex gap-2 flex-wrap">
           <button
+            onClick={() => setShowGraphViewer(true)}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-purple-600 text-white font-bold text-sm hover:bg-purple-700 transition-colors shadow-sm"
+          >
+            <Network className="h-4 w-4" />
+            Graphify Map
+          </button>
+          <button
             onClick={() => { setShowOcrScan(!showOcrScan); setShowAddForm(false); }}
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-500 text-white font-semibold text-sm hover:bg-emerald-600 transition-colors shadow-sm"
           >
@@ -401,6 +412,7 @@ export default function DataCenterTab({ lang, theme }: DataCenterTabProps) {
             {lang === 'id' ? 'Tambah Dokumen Manual' : 'Add Manual Document'}
           </button>
         </div>
+
       </div>
 
       {/* OCR Scan Panel */}
@@ -921,6 +933,14 @@ export default function DataCenterTab({ lang, theme }: DataCenterTabProps) {
           </div>
         );
       })()}
+      {/* ── Graphify Viewer Modal ────────────────────────────────────────────── */}
+      {showGraphViewer && (
+        <GraphifyViewer
+          records={filteredRecords}
+          onClose={() => setShowGraphViewer(false)}
+        />
+      )}
     </div>
   );
 }
+
