@@ -68,7 +68,7 @@ export const translations = {
     appsSubtitle: "Daftarkan produk ekosistem Anda dan kelola akses API key mereka",
     btnNewApp: "Aplikasi Baru",
     labelTier: "Tingkatan (Tier)",
-    tierInternal: "Internal MyBusiness",
+    tierInternal: "Internal MyAPX",
     tierCommunity: "Komunitas / Publik",
     appCreatedSuccess: "Aplikasi berhasil dibuat!",
     generateKey: "Buat API Key Baru",
@@ -168,7 +168,7 @@ export const translations = {
 
     // Overview Tab
     ovTitle: "Ecosystem Overview",
-    ovSubtitle: "Monitor AI performance and allocation across MyBusiness products",
+    ovSubtitle: "Monitor AI performance and allocation across MyAPX products",
     cardTotalApps: "Total Apps",
     cardTotalCalls: "AI Calls (This Month)",
     cardActiveKeys: "Active API Keys",
@@ -188,7 +188,7 @@ export const translations = {
     appsSubtitle: "Register your ecosystem products and manage their API key access",
     btnNewApp: "New Application",
     labelTier: "Tier",
-    tierInternal: "MyBusiness Internal",
+    tierInternal: "MyAPX Internal",
     tierCommunity: "Community / Public",
     appCreatedSuccess: "Application created successfully!",
     generateKey: "Generate New API Key",

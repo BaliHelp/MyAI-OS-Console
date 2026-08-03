@@ -30,7 +30,7 @@ export const geminiAdapter: ProviderAdapter = {
         },
       };
 
-      let modelToUse = "gemini-3.1-flash-lite";
+      let modelToUse = "gemini-2.5-flash-lite";
       let res = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/${modelToUse}:generateContent?key=${providerApiKey}`,
         { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }
@@ -38,8 +38,8 @@ export const geminiAdapter: ProviderAdapter = {
 
       if (!res.ok) {
         const firstErr = await res.json().catch(() => ({}));
-        console.warn(`[gemini] ${modelToUse} failed: ${firstErr.error?.message}. Retrying with gemini-3.5-flash...`);
-        modelToUse = "gemini-3.5-flash";
+        console.warn(`[gemini] ${modelToUse} failed: ${firstErr.error?.message}. Retrying with gemini-2.5-flash...`);
+        modelToUse = "gemini-2.5-flash";
         res = await fetch(
           `https://generativelanguage.googleapis.com/v1beta/models/${modelToUse}:generateContent?key=${providerApiKey}`,
           { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }

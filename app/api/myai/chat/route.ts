@@ -44,6 +44,23 @@ export async function POST(req: NextRequest) {
 
     const userPrompt = messages[messages.length - 1]?.content || "Halo AI Master";
 
+    // Build conversation history context (multi-turn memory)
+    // Combines all prior messages into a readable thread so the AI remembers context
+    let conversationContext = "";
+    if (messages.length > 1) {
+      const historyMessages = messages.slice(0, -1).slice(-10); // last 10 turns max
+      conversationContext = historyMessages
+        .map((m: any) => `${m.role === "assistant" ? "AI Master" : "Boss Bayu"}: ${m.content}`)
+        .join("\n");
+      conversationContext = `\n\n---\n## HISTORY PERCAKAPAN SEBELUMNYA\n${conversationContext}\n---\n`;
+    }
+
+    // Full prompt = history context + current user message
+    const fullPrompt = conversationContext
+      ? `${conversationContext}\nBoss Bayu: ${userPrompt}`
+      : userPrompt;
+
+
     // 1. Try active provider keys from Supabase database (gw_provider_keys)
     if (supabaseAdmin) {
       const { data: dbKeys } = await supabaseAdmin
@@ -63,7 +80,7 @@ export async function POST(req: NextRequest) {
 
             const res = await adapter.call(
               apiKey,
-              userPrompt,
+              fullPrompt,
               systemPrompt,
               { temperature: 0.7 },
               null,
@@ -98,7 +115,7 @@ export async function POST(req: NextRequest) {
       try {
         const res = await adapter.call(
           item.key.trim(),
-          userPrompt,
+          fullPrompt,
           systemPrompt,
           { temperature: 0.7 },
           null,

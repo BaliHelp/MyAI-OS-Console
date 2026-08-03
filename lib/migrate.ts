@@ -158,9 +158,9 @@ export async function runSeedMigration(): Promise<void> {
     const appsToInsert = [
       { name: "Indonesian Visas", slug: "indonesian-visas", tier: "internal", status: "active", created_at: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString() },
       { name: "Tropic Tech", slug: "tropic-tech", tier: "internal", status: "active", created_at: new Date(Date.now() - 25 * 24 * 60 * 60 * 1000).toISOString() },
-      { name: "MyBusiness Website", slug: "mybusiness-website", tier: "internal", status: "active", created_at: new Date(Date.now() - 20 * 24 * 60 * 60 * 1000).toISOString() },
-      { name: "MyBusiness Playstore", slug: "mybusiness-playstore", tier: "internal", status: "active", created_at: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString() },
-      { name: "MyBusiness Appstore", slug: "mybusiness-appstore", tier: "community", status: "active", created_at: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString() },
+      { name: "MyAPX Website", slug: "myapx-website", tier: "internal", status: "active", created_at: new Date(Date.now() - 20 * 24 * 60 * 60 * 1000).toISOString() },
+      { name: "MyAPX Playstore", slug: "myapx-playstore", tier: "internal", status: "active", created_at: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString() },
+      { name: "MyAPX Appstore", slug: "myapx-appstore", tier: "community", status: "active", created_at: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString() },
     ];
 
     const { data: insertedApps, error: appsError } = await supabaseAdmin
@@ -200,7 +200,7 @@ export async function runSeedMigration(): Promise<void> {
         last_used_at: new Date(Date.now() - 22 * 60 * 1000).toISOString(),
       },
       {
-        client_app_id: appIdBySlug["mybusiness-website"],
+        client_app_id: appIdBySlug["myapx-website"],
         key_prefix: "sk_myweb_bc11",
         key_hash: crypto.createHash("sha256").update("sk_myweb_bc11_seedkey3").digest("hex"),
         provider_scope: ["gpt", "gemini"],
@@ -210,7 +210,7 @@ export async function runSeedMigration(): Promise<void> {
         last_used_at: new Date(Date.now() - 42 * 60 * 1000).toISOString(),
       },
       {
-        client_app_id: appIdBySlug["mybusiness-playstore"],
+        client_app_id: appIdBySlug["myapx-playstore"],
         key_prefix: "sk_myplay_910e",
         key_hash: crypto.createHash("sha256").update("sk_myplay_910e_seedkey4").digest("hex"),
         provider_scope: ["gemini"],
@@ -220,7 +220,7 @@ export async function runSeedMigration(): Promise<void> {
         last_used_at: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
       },
       {
-        client_app_id: appIdBySlug["mybusiness-appstore"],
+        client_app_id: appIdBySlug["myapx-appstore"],
         key_prefix: "sk_mystore_3e4d",
         key_hash: crypto.createHash("sha256").update("sk_mystore_3e4d_seedkey5").digest("hex"),
         provider_scope: ["claude", "gpt"],
@@ -249,9 +249,9 @@ export async function runSeedMigration(): Promise<void> {
     const appNameById: Record<string, string> = {
       "Indonesian Visas": appIdBySlug["indonesian-visas"],
       "Tropic Tech": appIdBySlug["tropic-tech"],
-      "MyBusiness Website": appIdBySlug["mybusiness-website"],
-      "MyBusiness Playstore": appIdBySlug["mybusiness-playstore"],
-      "MyBusiness Appstore": appIdBySlug["mybusiness-appstore"],
+      "MyAPX Website": appIdBySlug["myapx-website"],
+      "MyAPX Playstore": appIdBySlug["myapx-playstore"],
+      "MyAPX Appstore": appIdBySlug["myapx-appstore"],
     };
 
     // ── Seed usage_logs (14 days of synthetic data) ────────────────────────
@@ -260,9 +260,9 @@ export async function runSeedMigration(): Promise<void> {
     const keyMapping = [
       { prefix: "sk_visas_a8f3", appName: "Indonesian Visas" },
       { prefix: "sk_tropic_7d2f", appName: "Tropic Tech" },
-      { prefix: "sk_myweb_bc11", appName: "MyBusiness Website" },
-      { prefix: "sk_myplay_910e", appName: "MyBusiness Playstore" },
-      { prefix: "sk_mystore_3e4d", appName: "MyBusiness Appstore" },
+      { prefix: "sk_myweb_bc11", appName: "MyAPX Website" },
+      { prefix: "sk_myplay_910e", appName: "MyAPX Playstore" },
+      { prefix: "sk_mystore_3e4d", appName: "MyAPX Appstore" },
     ];
 
     const logsToInsert: object[] = [];
@@ -319,8 +319,8 @@ export async function runSeedMigration(): Promise<void> {
       },
       {
         client_app_id: null,
-        title: "MyBusiness Ecosystem - Aturan Tone of Voice AI",
-        content: "Semua asisten AI di seluruh produk MyBusiness harus mematuhi panduan kepribadian ini: Nada Bicara: Profesional, bersahabat, ringkas, dan jujur.",
+        title: "MyAPX Ecosystem - Aturan Tone of Voice AI",
+        content: "Semua asisten AI di seluruh produk MyAPX harus mematuhi panduan kepribadian ini: Nada Bicara: Profesional, bersahabat, ringkas, dan jujur.",
         created_at: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
       },
     ];

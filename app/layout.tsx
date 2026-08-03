@@ -66,7 +66,7 @@ export default function RootLayout({
                   "name": "MyAI OS",
                   "legalName": "MyAI OS - a Bali Technology product",
                   "url": "https://console.myai.nexus",
-                  "description": "MyAI OS adalah AI Gateway terpusat yang menyatukan seluruh integrasi kecerdasan buatan untuk ekosistem Bali Enterprises Group — dipersiapkan menjadi pelopor infrastruktur AI lokal Indonesia, mendukung Indonesian Visas, MyBusiness, Tropic Tech, dan divisi lainnya di bawah satu kendali terpusat.",
+                  "description": "MyAI OS adalah AI Gateway terpusat yang menyatukan seluruh integrasi kecerdasan buatan untuk ekosistem Bali Enterprises Group — dipersiapkan menjadi pelopor infrastruktur AI lokal Indonesia, mendukung Indonesian Visas, MyAPX, Tropic Tech, dan divisi lainnya di bawah satu kendali terpusat.",
                   "parentOrganization": {
                     "@type": "Organization",
                     "name": "Bali Technology",

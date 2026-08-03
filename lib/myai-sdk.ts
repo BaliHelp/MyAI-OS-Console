@@ -1,6 +1,6 @@
 /**
  * Universal MyAI OS Client SDK
- * Lightweight helper library for external apps (MyBusiness, Kamus AI, Tropic Tech, etc.)
+ * Lightweight helper library for external apps (MyAPX, Kamus AI, Tropic Tech, etc.)
  * Handles gateway chat, vision/OCR, reasoning, and automatic Data Center ingestion.
  */
 

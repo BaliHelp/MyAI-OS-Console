@@ -4,7 +4,7 @@ import { Code, Eye } from "lucide-react";
 
 export const metadata: Metadata = {
   title: "Kebijakan Privasi — MyAI OS Console",
-  description: "Kebijakan privasi dan perlindungan data MyAI OS Console, infrastruktur internal MyBusiness.",
+  description: "Kebijakan privasi dan perlindungan data MyAI OS Console, infrastruktur internal MyAPX.",
 };
 
 export default function PrivacyPage() {
@@ -18,7 +18,7 @@ export default function PrivacyPage() {
           </div>
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Kebijakan Privasi</h1>
-            <p className="text-xs text-gray-400">MyAI OS Console — Infrastruktur Internal MyBusiness</p>
+            <p className="text-xs text-gray-400">MyAI OS Console — Infrastruktur Internal MyAPX</p>
           </div>
         </div>
 
@@ -82,7 +82,7 @@ export default function PrivacyPage() {
           <section>
             <h2 className="text-base font-bold text-white mb-3">6. Keterbukaan</h2>
             <p>
-              Kebijakan ini berlaku untuk penggunaan internal ekosistem MyBusiness.
+              Kebijakan ini berlaku untuk penggunaan internal ekosistem MyAPX.
               Produk-produk yang menggunakan AI Gateway (Indonesian Visas, Tropic Tech, dll.)
               mungkin memiliki kebijakan privasi tersendiri yang berlaku untuk pengguna akhirnya.
             </p>

@@ -4,7 +4,7 @@ import { Code, Shield } from "lucide-react";
 
 export const metadata: Metadata = {
   title: "Syarat Penggunaan — MyAI OS Console",
-  description: "Syarat dan ketentuan penggunaan MyAI OS Console, infrastruktur internal MyBusiness.",
+  description: "Syarat dan ketentuan penggunaan MyAI OS Console, infrastruktur internal MyAPX.",
 };
 
 export default function TermsPage() {
@@ -18,14 +18,14 @@ export default function TermsPage() {
           </div>
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Syarat Penggunaan</h1>
-            <p className="text-xs text-gray-400">MyAI OS Console — Infrastruktur Internal MyBusiness</p>
+            <p className="text-xs text-gray-400">MyAI OS Console — Infrastruktur Internal MyAPX</p>
           </div>
         </div>
 
         <div className="p-4 rounded-2xl border border-amber-500/20 bg-amber-500/5 mb-8 flex items-start gap-3">
           <Shield className="h-5 w-5 text-amber-400 shrink-0 mt-0.5" />
           <p className="text-sm text-amber-200">
-            <strong>Penggunaan Internal Saja.</strong> MyAI OS Console adalah sistem infrastruktur <em>internal</em> untuk ekosistem MyBusiness.
+            <strong>Penggunaan Internal Saja.</strong> MyAI OS Console adalah sistem infrastruktur <em>internal</em> untuk ekosistem MyAPX.
             Sistem ini <strong>bukan produk publik</strong> dan tidak dimaksudkan untuk diakses oleh pihak luar tanpa otorisasi eksplisit dari pemilik ekosistem.
           </p>
         </div>
@@ -35,8 +35,8 @@ export default function TermsPage() {
             <h2 className="text-base font-bold text-white mb-3">1. Definisi</h2>
             <p>
               "MyAI OS Console" (selanjutnya disebut "Konsol") adalah panel administrasi internal yang dirancang untuk mengelola API gateway,
-              konfigurasi AI, basis pengetahuan, dan data operasional ekosistem produk MyBusiness,
-              termasuk namun tidak terbatas pada: Indonesian Visas, Tropic Tech, dan produk lainnya di bawah naungan MyBusiness.
+              konfigurasi AI, basis pengetahuan, dan data operasional ekosistem produk MyAPX,
+              termasuk namun tidak terbatas pada: Indonesian Visas, Tropic Tech, dan produk lainnya di bawah naungan MyAPX.
             </p>
           </section>
 
@@ -55,7 +55,7 @@ export default function TermsPage() {
               <li>Menjaga kerahasiaan kredensial admin, API key, dan encryption secret.</li>
               <li>Tidak mengekspos nilai credential apapun dalam laporan, log, screenshot, atau komunikasi yang tidak terenkripsi.</li>
               <li>Melaporkan segera kepada pemilik ekosistem jika terdapat indikasi akses tidak sah.</li>
-              <li>Tidak menggunakan infrastruktur ini untuk aktivitas di luar lingkup operasional MyBusiness.</li>
+              <li>Tidak menggunakan infrastruktur ini untuk aktivitas di luar lingkup operasional MyAPX.</li>
             </ul>
           </section>
 
@@ -71,7 +71,7 @@ export default function TermsPage() {
             <h2 className="text-base font-bold text-white mb-3">5. Kerahasiaan Data</h2>
             <p>
               Data yang diproses melalui Konsol — termasuk log penggunaan, data klien, dokumen pengetahuan, dan konfigurasi provider —
-              bersifat rahasia dan milik ekosistem MyBusiness. Penggunaan data ini di luar konteks operasional internal dilarang.
+              bersifat rahasia dan milik ekosistem MyAPX. Penggunaan data ini di luar konteks operasional internal dilarang.
             </p>
           </section>
 

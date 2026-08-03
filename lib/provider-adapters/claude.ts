@@ -32,7 +32,7 @@ export const claudeAdapter: ProviderAdapter = {
           "anthropic-version": "2023-06-01",
         },
         body: JSON.stringify({
-          model: options.model_name || "claude-3-5-sonnet-20241022",
+          model: options.model_name || "claude-sonnet-4-5",
           max_tokens: options.max_tokens ?? 2000,
           system: systemPrompt,
           messages: [{ role: "user", content: contentArray }],

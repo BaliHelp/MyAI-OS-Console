@@ -348,9 +348,9 @@ export default function DataCenterTab({ lang, theme }: DataCenterTabProps) {
             "myindo-appstore": "📱",
             "myindo-playstore": "▶️",
             "myindo-website": "🌐",
-            "mybusiness-appstore": "📱",
-            "mybusiness-playstore": "▶️",
-            "mybusiness-website": "🌐",
+            "myapx-appstore": "📱",
+            "myapx-playstore": "▶️",
+            "myapx-website": "🌐",
           };
 
           const icon = APP_ICONS[app.slug] || "📦";

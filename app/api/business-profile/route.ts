@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
   } else {
     const { data, error } = await supabaseAdmin
       .from("gw_business_profile")
-      .insert({ title: "MyBusiness Ecosystem Core", content })
+      .insert({ title: "MyAPX Ecosystem Core", content })
       .select()
       .single();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });

@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
         .join("\n\n");
     }
 
-    const systemPrompt = `You are "MyAI OS Gateway Helper" — a secure AI assistant for the admin console of the MyBusiness ecosystem.
+    const systemPrompt = `You are "MyAI OS Gateway Helper" — a secure AI assistant for the admin console of the MyAPX ecosystem.
 
 Business Profile:
 ${profileContent}
@@ -97,7 +97,7 @@ Answer the admin's question clearly, accurately, and professionally. Default to 
       } else if (prompt.toLowerCase().includes("api") || prompt.toLowerCase().includes("tropic")) {
         response += "Integrasi Tropic Tech menggunakan HTTPS ke `api.tropictech.com/v1/` dengan rate limit 120 req/menit per IP.";
       } else {
-        response += `Ekosistem MyBusiness mengelola 5 aplikasi yang semuanya terhubung ke MyAI OS Gateway. Pertanyaan Anda: "${prompt}"`;
+        response += `Ekosistem MyAPX mengelola 5 aplikasi yang semuanya terhubung ke MyAI OS Gateway. Pertanyaan Anda: "${prompt}"`;
       }
       return NextResponse.json({ text: response });
     }
