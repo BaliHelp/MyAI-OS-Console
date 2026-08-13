@@ -234,27 +234,34 @@ export async function POST(req: NextRequest) {
     let knowledgeContext = "";
     let profileContent = "";
 
-    const [{ data: docs }, { data: profile }] = await Promise.all([
-      supabaseAdmin
-        .from("gw_knowledge_documents")
-        .select("title, content, client_app_id"),
-      supabaseAdmin
-        .from("gw_business_profile")
-        .select("content")
-        .limit(1)
-        .single()
-    ]);
+    // Skipped entirely when `tools` is present: callers doing tool-calling (e.g. Jarvis) already
+    // have their own live-data tools (e.g. readVisaDatabase) and don't need the static knowledge
+    // base dumped into the prompt on top of that — for Indonesian Visas specifically this was
+    // ~115KB / ~30k tokens of every single request, which is what pushed tool-calling requests
+    // past OpenAI's per-minute token limit. Non-tools requests are completely unaffected.
+    if (!hasTools) {
+      const [{ data: docs }, { data: profile }] = await Promise.all([
+        supabaseAdmin
+          .from("gw_knowledge_documents")
+          .select("title, content, client_app_id"),
+        supabaseAdmin
+          .from("gw_business_profile")
+          .select("content")
+          .limit(1)
+          .single()
+      ]);
 
-    profileContent = profile?.content || "";
-    
-    // Filter docs scoped to either this client_app_id or global (null)
-    const filteredDocs = (docs || []).filter(
-      (d) => !d.client_app_id || d.client_app_id === keyData.client_app_id
-    );
+      profileContent = profile?.content || "";
 
-    knowledgeContext = filteredDocs
-      .map((d) => `Document: "${d.title}"\nContent: ${d.content}`)
-      .join("\n\n");
+      // Filter docs scoped to either this client_app_id or global (null)
+      const filteredDocs = (docs || []).filter(
+        (d) => !d.client_app_id || d.client_app_id === keyData.client_app_id
+      );
+
+      knowledgeContext = filteredDocs
+        .map((d) => `Document: "${d.title}"\nContent: ${d.content}`)
+        .join("\n\n");
+    }
 
     // 4b. Fetch Field Spec for System Prompt & Output Schema
     let fieldSpec: any = null;
@@ -365,16 +372,16 @@ ${resolvedSystemPrompt}`;
 4. KHUSUS INFORMASI VISA & HARGA: Kamu WAJIB SELALU 100% mengacu pada data terperinci dari 'Dokumen Resmi Visa Database Admin Dashboard' di dalam basis pengetahuan (Knowledge Base) kami. DILARANG mengarang harga atau aturan visa sendiri.`;
     }
 
-    // Append core knowledge base context
-
-
-    resolvedSystemPrompt += `\n\nBerikut adalah profil korporat dan basis pengetahuan produk kami. Gunakan informasi ini jika relevan untuk menjawab pertanyaan:
+    // Append core knowledge base context (skipped for tools-mode — see the fetch above for why)
+    if (!hasTools) {
+      resolvedSystemPrompt += `\n\nBerikut adalah profil korporat dan basis pengetahuan produk kami. Gunakan informasi ini jika relevan untuk menjawab pertanyaan:
 
 Business Profile Context:
 ${profileContent}
 
 Product Knowledge Base Context:
 ${knowledgeContext || "No product documents configured."}`;
+    }
 
     // ── Injeksi konten dokumen untuk tipe teks (PDF-text, DOCX, CSV, TXT) ──
     let effectivePrompt = prompt;
