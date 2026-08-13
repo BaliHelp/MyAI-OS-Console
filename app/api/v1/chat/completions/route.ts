@@ -87,6 +87,25 @@ export async function POST(req: NextRequest) {
       if (sys && typeof sys.content === "string") callerSystemPrompt = sys.content.trim();
     }
 
+    // OpenAI-compatible tool/function-calling passthrough. When `tools` is present the gateway
+    // locks routing to gpt only (no cross-provider failover — Claude/Gemini/etc. use different
+    // native tool-calling formats) and forwards the full `messages[]` array verbatim instead of
+    // flattening to the last message, so a caller can thread a tool-result loop (model requests
+    // a tool -> caller executes it -> caller sends the result back as role:"tool" -> model
+    // continues). See gpt.ts for the actual OpenAI request/response handling.
+    const hasTools = Array.isArray(body.tools) && body.tools.length > 0;
+
+    if (hasTools && keyData.provider_scope && !keyData.provider_scope.includes("gpt")) {
+      return NextResponse.json(
+        {
+          error:
+            "This request includes 'tools', which the gateway only supports via GPT (no cross-provider tool-calling translation yet). " +
+            "This API key's provider_scope does not include 'gpt' — grant it access to gpt in Settings -> API Keys, or omit 'tools'.",
+        },
+        { status: 422 }
+      );
+    }
+
     // ── Deteksi dan parsing semua tipe file yang diunggah ─────────────────
     const fileBase64 = body.file || body.image;
     let uploadedFile: ParsedFileResult | null = null;
@@ -458,6 +477,7 @@ ${liveDiagnosticSummary}
     let selectedUsageCount = 0;
     let tierUsed = 1;
     let providerUsed = "";
+    let toolCallsResult: import("@/lib/provider-adapters").ToolCall[] | undefined;
     const startTime = Date.now();
 
     // Group assignments by pool_tier
@@ -491,6 +511,18 @@ ${liveDiagnosticSummary}
       }
     }
 
+    // Fail loudly when `tools` is present but this field has no gpt tier at all — tools mode
+    // locks routing to gpt only (see the loop below), so without a gpt tier every provider would
+    // be filtered out and the request would fall through to a generic "all tiers failed" 503.
+    if (hasTools && !assignments.some((a) => a.provider === "gpt")) {
+      return NextResponse.json(
+        {
+          error: `Field '${fieldKey}' has no 'gpt' tier configured, but this request includes 'tools'. Add a gpt tier to this field's pool assignments in the dashboard, or omit 'tools'.`,
+        },
+        { status: 422 }
+      );
+    }
+
     // Loop through each tier
     tierOuterLoop:
     for (const tier of sortedTiers) {
@@ -499,7 +531,11 @@ ${liveDiagnosticSummary}
         .filter((p) => !keyData.provider_scope || keyData.provider_scope.includes(p))
         // When the request has an image, skip providers whose adapter can't accept it —
         // otherwise deepseek/grok would silently drop the image and answer from text alone.
-        .filter((p) => !requiresVision || PROVIDER_REGISTRY[p]?.supportsVision === true);
+        .filter((p) => !requiresVision || PROVIDER_REGISTRY[p]?.supportsVision === true)
+        // When `tools` is present, lock to gpt only — no cross-provider tool-calling
+        // translation, so failing over to claude/gemini/etc. mid-request would silently break
+        // the tool-calling contract instead of just failing the call outright.
+        .filter((p) => !hasTools || p === "gpt");
 
       if (providersInTier.length === 0) {
         console.warn(`[gateway] No allowed${requiresVision ? " vision-capable" : ""} providers in tier ${tier} for current key scope: ${keyData.provider_scope}`);
@@ -550,11 +586,12 @@ ${liveDiagnosticSummary}
           providerUsed = candidate.provider;
           const providerApiKey = candidate.key;
 
-          const resCall = await attemptCall(candidate.provider, providerApiKey, prompt, systemPrompt, body, selectedKeyId, selectedKeyLabel, parsedFile);
+          const resCall = await attemptCall(candidate.provider, providerApiKey, prompt, systemPrompt, body, selectedKeyId, selectedKeyLabel, parsedFile, undefined, hasTools ? "gpt-4o" : undefined);
           if (resCall.success) {
             aiResponseText = resCall.aiResponseText;
             promptTokens = resCall.promptTokens;
             completionTokens = resCall.completionTokens;
+            toolCallsResult = resCall.toolCalls;
             success = true;
             break tierOuterLoop;
           } else {
@@ -649,12 +686,15 @@ ${liveDiagnosticSummary}
           selectedKeyLabel,
           parsedFile,
           candidate.base_url,
-          candidate.model_name
+          // Tools mode pins gpt-4o regardless of the key's configured model, for reliability
+          // parity with Indonesian Visas' existing direct-OpenAI Jarvis implementation.
+          hasTools ? "gpt-4o" : candidate.model_name
         );
         if (resCall.success) {
           aiResponseText = resCall.aiResponseText;
           promptTokens = resCall.promptTokens;
           completionTokens = resCall.completionTokens;
+          toolCallsResult = resCall.toolCalls;
           success = true;
 
           // Reset cooldown stats on success
@@ -889,6 +929,10 @@ ${liveDiagnosticSummary}
       provider_used: providerUsed,
       processed_at: new Date().toISOString(),
       result: result,
+      // OpenAI-compatible: same shape as choices[0].message.tool_calls. Present only when the
+      // model chose to call a tool for this turn — the caller executes it and sends the result
+      // back as a new role:"tool" message to continue the conversation.
+      ...(toolCallsResult && toolCallsResult.length > 0 ? { tool_calls: toolCallsResult } : {}),
       ...(dataCenterId ? { data_center_id: dataCenterId } : {})
     });
 
@@ -928,6 +972,10 @@ export async function attemptCall(
       max_tokens: body.max_tokens,
       model_name: modelNameOverride || body.model_name,
       base_url: baseUrl,
+      // Only the gpt adapter reads these (routing is locked to gpt whenever tools are present —
+      // see the tier-loop filter above). Harmless no-ops for every other adapter.
+      tools: body.tools,
+      messages: Array.isArray(body.messages) ? body.messages : undefined,
     },
     parsedFile ?? null,
     selectedKeyId,

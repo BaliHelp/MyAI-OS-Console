@@ -16,12 +16,69 @@ export const gptAdapter: ProviderAdapter = {
 
   async call(providerApiKey, prompt, systemPrompt, options, fileData, selectedKeyId, selectedKeyLabel = "") {
     try {
-      let contentArray: any[] = [{ type: "text", text: prompt }];
-      if (fileData) {
-        contentArray.push({
-          type: "image_url",
-          image_url: { url: `data:${fileData.mimeType};base64,${fileData.base64Data}` },
-        });
+      const hasTools = Array.isArray(options.tools) && options.tools.length > 0;
+
+      let requestBody: Record<string, unknown>;
+
+      if (hasTools) {
+        // Tool-calling mode: forward the caller's full conversation verbatim (preserving prior
+        // assistant tool_calls and role:"tool" results) instead of flattening to a single prompt
+        // string, so the caller can run a real OpenAI-style tool loop. System messages from the
+        // caller are dropped — the gateway's own systemPrompt (field spec + persona + any
+        // honored caller `system` field) is the single source of truth for the system turn.
+        const forwardedMessages = (options.messages || []).filter((m: any) => m?.role !== "system");
+
+        // Callers doing tool-calling are expected to send `messages`, not a bare `prompt` — but
+        // fall back to `prompt` rather than sending OpenAI a conversation with no user turn at
+        // all if one was omitted.
+        if (forwardedMessages.length === 0 && prompt) {
+          forwardedMessages.push({ role: "user", content: prompt });
+        }
+
+        // An uploaded image still must not be silently dropped just because `tools` is present —
+        // attach it to the last message (as OpenAI's multipart content shape) rather than
+        // ignoring it, consistent with the gateway's vision-routing guarantee.
+        if (fileData && forwardedMessages.length > 0) {
+          const last = forwardedMessages[forwardedMessages.length - 1];
+          if (typeof last.content === "string") {
+            forwardedMessages[forwardedMessages.length - 1] = {
+              ...last,
+              content: [
+                { type: "text", text: last.content },
+                { type: "image_url", image_url: { url: `data:${fileData.mimeType};base64,${fileData.base64Data}` } },
+              ],
+            };
+          }
+        }
+
+        requestBody = {
+          // Pinned regardless of the field/key's configured model — tool-calling reliability
+          // requirement, not a cost-driven default like the non-tools path below.
+          model: "gpt-4o",
+          messages: [{ role: "system", content: systemPrompt }, ...forwardedMessages],
+          tools: options.tools,
+          tool_choice: "auto",
+          temperature: options.temperature ?? 0.7,
+          max_tokens: options.max_tokens ?? 2000,
+        };
+      } else {
+        let contentArray: any[] = [{ type: "text", text: prompt }];
+        if (fileData) {
+          contentArray.push({
+            type: "image_url",
+            image_url: { url: `data:${fileData.mimeType};base64,${fileData.base64Data}` },
+          });
+        }
+
+        requestBody = {
+          model: options.model_name || "gpt-4o-mini",
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: contentArray },
+          ],
+          temperature: options.temperature ?? 0.7,
+          max_tokens: options.max_tokens ?? 2000,
+        };
       }
 
       const res = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -30,15 +87,7 @@ export const gptAdapter: ProviderAdapter = {
           "Content-Type": "application/json",
           Authorization: `Bearer ${providerApiKey}`,
         },
-        body: JSON.stringify({
-          model: options.model_name || "gpt-4o-mini",
-          messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: contentArray },
-          ],
-          temperature: options.temperature ?? 0.7,
-          max_tokens: options.max_tokens ?? 2000,
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       const resJson = await res.json().catch(() => ({}));
@@ -51,9 +100,18 @@ export const gptAdapter: ProviderAdapter = {
       }
 
       const aiResponseText = resJson.choices?.[0]?.message?.content || "";
+      const toolCalls = resJson.choices?.[0]?.message?.tool_calls;
       const promptTokens = resJson.usage?.prompt_tokens || 0;
       const completionTokens = resJson.usage?.completion_tokens || 0;
-      return { success: true, aiResponseText, promptTokens, completionTokens, errorMsg: "", status: 200 };
+      return {
+        success: true,
+        aiResponseText,
+        promptTokens,
+        completionTokens,
+        errorMsg: "",
+        status: 200,
+        ...(Array.isArray(toolCalls) && toolCalls.length > 0 ? { toolCalls } : {}),
+      };
     } catch (err: any) {
       console.error(`[gateway] Exception calling GPT (${selectedKeyLabel}):`, err);
       return { success: false, aiResponseText: "", promptTokens: 0, completionTokens: 0, errorMsg: err.message || "Network error", status: 500 };
