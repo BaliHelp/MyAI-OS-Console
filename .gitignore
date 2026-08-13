@@ -39,3 +39,6 @@ yarn-error.log*
 
 # ── Scratch Files (Temporer) ──────────────────────────────────────────────────
 scratch/
+
+# ── Graphify (generated knowledge-graph cache/output) ─────────────────────────
+graphify-out/
