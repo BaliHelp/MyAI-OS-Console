@@ -363,7 +363,7 @@ ${resolvedSystemPrompt}`;
 
 
     // 4c-ter. Enforce Natural Human Tone & prohibit bold asterisks (**) for all chatbot fields
-    const isChatbotField = fieldKey.startsWith("chatbot") || fieldKey === "chatbot" || fieldKey === "chatbot_general" || fieldKey === "chatbot_myai_home";
+    const isChatbotField = fieldKey.startsWith("chatbot") || fieldKey === "chatbot" || fieldKey === "chatbot_general" || fieldKey === "chatbot_myai_home" || fieldKey === "bogani_ai";
     if (isChatbotField) {
       resolvedSystemPrompt += `\n\n--- ATURAN GAYA BAHASA PENULISAN (HUMAN NATURAL STYLE) ---
 1. Jawablah dengan gaya percakapan customer service / asisten manusia yang ramah, santai tapi profesional, singkat, padat, dan solutif.
