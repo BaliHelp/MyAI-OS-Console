@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { decryptKey } from "@/lib/crypto";
 import { supabaseAdmin } from "@/lib/supabase";
+import { testProviderConnection } from "@/lib/test-provider-connection";
 
 export async function GET(req: NextRequest) {
   if (!supabaseAdmin) {
@@ -11,7 +12,7 @@ export async function GET(req: NextRequest) {
     // 1. Fetch all keys from DB sorted by label and created_at ascending
     const { data: keys, error: fetchError } = await supabaseAdmin
       .from("gw_provider_keys")
-      .select("id, provider, label, key_encrypted, status, base_url")
+      .select("id, provider, label, key_encrypted, status, base_url, model_name")
       .eq("status", "active")
       .order("label", { ascending: true })
       .order("created_at", { ascending: true });
@@ -24,7 +25,11 @@ export async function GET(req: NextRequest) {
       return NextResponse.json([]);
     }
 
-    // 2. Map and test in parallel using Promise.all
+    // 2. Map and test in parallel using Promise.all — for custom/OpenAI-compatible providers
+    // this also probes a real chat completion with the configured model_name, not just
+    // key/URL reachability, so "Terkoneksi" actually reflects whether real gateway traffic
+    // would work (a key can pass the old /models-only check while every real request fails —
+    // e.g. wrong model id, suspended billing).
     const results = await Promise.all(
       keys.map(async (k) => {
         let rawKey = "";
@@ -38,93 +43,7 @@ export async function GET(req: NextRequest) {
           return { id: k.id, provider: k.provider, label: k.label, connected: false, details: "Empty key" };
         }
 
-        let connected = false;
-        let details = "";
-
-        try {
-          if (k.provider === "gemini") {
-            const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${rawKey}`, { signal: AbortSignal.timeout(5000) });
-            if (res.status === 200) {
-              connected = true;
-              details = "OK";
-            } else {
-              details = `HTTP ${res.status}`;
-            }
-          } else if (k.provider === "gpt") {
-            const res = await fetch("https://api.openai.com/v1/models", {
-              headers: { "Authorization": `Bearer ${rawKey}` },
-              signal: AbortSignal.timeout(5000)
-            });
-            if (res.status === 200) {
-              connected = true;
-              details = "OK";
-            } else {
-              details = `HTTP ${res.status}`;
-            }
-          } else if (k.provider === "claude") {
-            const res = await fetch("https://api.anthropic.com/v1/models", {
-              headers: { "x-api-key": rawKey, "anthropic-version": "2023-06-01" },
-              signal: AbortSignal.timeout(5000)
-            });
-            if (res.status === 200) {
-              connected = true;
-              details = "OK";
-            } else {
-              details = `HTTP ${res.status}`;
-            }
-          } else if (k.provider === "grok") {
-            const res = await fetch("https://api.x.ai/v1/models", {
-              headers: { "Authorization": `Bearer ${rawKey}` },
-              signal: AbortSignal.timeout(5000)
-            });
-            if (res.status === 200) {
-              connected = true;
-              details = "OK";
-            } else {
-              details = `HTTP ${res.status}`;
-            }
-          } else if (k.provider === "deepseek") {
-            const res = await fetch("https://api.deepseek.com/models", {
-              headers: { "Authorization": `Bearer ${rawKey}` },
-              signal: AbortSignal.timeout(5000)
-            });
-            if (res.status === 200) {
-              connected = true;
-              details = "OK";
-            } else {
-              details = `HTTP ${res.status}`;
-            }
-          } else if (k.provider === "others" || k.provider === "custom_openai") {
-            let testUrl = (k as any).base_url || "https://openrouter.ai/api/v1";
-            if (testUrl.endsWith("/chat/completions")) {
-              testUrl = testUrl.replace("/chat/completions", "/models");
-            } else {
-              if (testUrl.endsWith("/")) {
-                testUrl += "models";
-              } else {
-                testUrl += "/models";
-              }
-            }
-            const res = await fetch(testUrl, {
-              headers: { 
-                "Authorization": `Bearer ${rawKey}`,
-                "HTTP-Referer": "https://console.myai.nexus",
-                "X-Title": "MyAI OS Console Gateway"
-              },
-              signal: AbortSignal.timeout(5000)
-            });
-            if (res.status === 200) {
-              connected = true;
-              details = "OK";
-            } else {
-              details = `HTTP ${res.status}`;
-            }
-          } else {
-            details = "Unknown provider";
-          }
-        } catch (err: any) {
-          details = "Timeout/Error";
-        }
+        const { connected, details } = await testProviderConnection(k.provider, rawKey, k.base_url, k.model_name);
 
         return {
           id: k.id,

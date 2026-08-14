@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { decryptKey } from "@/lib/crypto";
 import { supabaseAdmin } from "@/lib/supabase";
+import { testProviderConnection } from "@/lib/test-provider-connection";
 
 export async function POST(req: NextRequest) {
   if (!supabaseAdmin) {
@@ -16,7 +17,7 @@ export async function POST(req: NextRequest) {
     // 1. Fetch key from DB
     const { data: keyData, error: fetchError } = await supabaseAdmin
       .from("gw_provider_keys")
-      .select("key_encrypted, provider, base_url")
+      .select("key_encrypted, provider, base_url, model_name")
       .eq("id", id)
       .single();
 
@@ -36,103 +37,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "API key is empty" }, { status: 400 });
     }
 
-    const provider = keyData.provider;
-    let connected = false;
-    let details = "";
+    console.log(`[test-conn] Testing connection for provider: ${keyData.provider}, key id: ${id}`);
 
-    console.log(`[test-conn] Testing connection for provider: ${provider}, key id: ${id}`);
-
-    // 3. Test connection based on provider
-    if (provider === "gemini") {
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${rawKey}`);
-      if (res.status === 200) {
-        connected = true;
-        details = "Koneksi sukses (Google AI Studio)";
-      } else {
-        const json = await res.json().catch(() => ({}));
-        details = `Gagal: ${json.error?.message || `HTTP ${res.status}`}`;
-      }
-    } else if (provider === "gpt") {
-      const res = await fetch("https://api.openai.com/v1/models", {
-        headers: {
-          "Authorization": `Bearer ${rawKey}`
-        }
-      });
-      if (res.status === 200) {
-        connected = true;
-        details = "Koneksi sukses (OpenAI API)";
-      } else {
-        const json = await res.json().catch(() => ({}));
-        details = `Gagal: ${json.error?.message || `HTTP ${res.status}`}`;
-      }
-    } else if (provider === "claude") {
-      const res = await fetch("https://api.anthropic.com/v1/models", {
-        headers: {
-          "x-api-key": rawKey,
-          "anthropic-version": "2023-06-01"
-        }
-      });
-      if (res.status === 200) {
-        connected = true;
-        details = "Koneksi sukses (Anthropic API)";
-      } else {
-        const json = await res.json().catch(() => ({}));
-        details = `Gagal: ${json.error?.message || `HTTP ${res.status}`}`;
-      }
-    } else if (provider === "grok") {
-      const res = await fetch("https://api.x.ai/v1/models", {
-        headers: {
-          "Authorization": `Bearer ${rawKey}`
-        }
-      });
-      if (res.status === 200) {
-        connected = true;
-        details = "Koneksi sukses (x.ai API)";
-      } else {
-        const json = await res.json().catch(() => ({}));
-        details = `Gagal: ${json.error?.message || `HTTP ${res.status}`}`;
-      }
-    } else if (provider === "deepseek") {
-      const res = await fetch("https://api.deepseek.com/models", {
-        headers: {
-          "Authorization": `Bearer ${rawKey}`
-        }
-      });
-      if (res.status === 200) {
-        connected = true;
-        details = "Koneksi sukses (Deepseek API)";
-      } else {
-        const json = await res.json().catch(() => ({}));
-        details = `Gagal: ${json.error?.message || `HTTP ${res.status}`}`;
-      }
-    } else if (provider === "others" || provider === "custom_openai") {
-      let testUrl = (keyData as any).base_url || "https://openrouter.ai/api/v1";
-      if (testUrl.endsWith("/chat/completions")) {
-        testUrl = testUrl.replace("/chat/completions", "/models");
-      } else {
-        if (testUrl.endsWith("/")) {
-          testUrl += "models";
-        } else {
-          testUrl += "/models";
-        }
-      }
-      const res = await fetch(testUrl, {
-        headers: { 
-          "Authorization": `Bearer ${rawKey}`,
-          "HTTP-Referer": "https://console.myai.nexus",
-          "X-Title": "MyAI OS Console Gateway"
-        }
-      });
-      if (res.status === 200) {
-        connected = true;
-        details = "Koneksi sukses (Custom OpenAI API)";
-      } else {
-        const json = await res.json().catch(() => ({}));
-        details = `Gagal: ${json.error?.message || `HTTP ${res.status}`}`;
-      }
-    } else {
-      return NextResponse.json({ error: `Unsupported provider: ${provider}` }, { status: 400 });
-    }
+    // 3. Test connection — for custom/OpenAI-compatible providers this also probes a real
+    // chat completion with the configured model_name, not just key/URL reachability, so
+    // "Terkoneksi" actually reflects whether real gateway traffic would work.
+    const { connected, details } = await testProviderConnection(
+      keyData.provider,
+      rawKey,
+      keyData.base_url,
+      keyData.model_name
+    );
 
     return NextResponse.json({ connected, details });
   } catch (err: any) {
