@@ -6,7 +6,11 @@ export interface ConnectionTestResult {
   details: string;
 }
 
-const TIMEOUT_MS = 8000;
+// 15s rather than a tighter budget: provider APIs occasionally take 10-20s even for a trivial
+// /models listing under transient load (observed with OpenAI) — a short timeout turns "just
+// slow" into a false "disconnected" report, exactly the kind of misleading status this test
+// exists to prevent.
+const TIMEOUT_MS = 15000;
 
 async function checkModelsList(
   url: string,

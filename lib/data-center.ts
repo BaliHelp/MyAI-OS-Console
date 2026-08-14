@@ -11,7 +11,7 @@ const dbJsonPath = path.resolve(projectRoot, "db.json");
 export interface DataCenterRecordInput {
   client_app_id?: string | null;
   field_key?: string | null;
-  source_type: 'ocr_upload' | 'url_scrape' | 'manual_document' | 'chat_memory_fact';
+  source_type: 'ocr_upload' | 'url_scrape' | 'manual_document' | 'chat_memory_fact' | 'chatbot_interaction' | 'content_generation';
   source_url?: string | null;
   document_type?: string | null;
   extracted_data?: any;

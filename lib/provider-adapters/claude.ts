@@ -1,5 +1,6 @@
 import type { ProviderAdapter, FileData } from "./types";
 import { supabaseAdmin } from "@/lib/supabase";
+import { parseAnthropicSse } from "./sse-utils";
 
 async function autoDisableKey(selectedKeyId: string | null | undefined, selectedKeyLabel: string) {
   if (selectedKeyId && supabaseAdmin) {
@@ -37,11 +38,14 @@ export const claudeAdapter: ProviderAdapter = {
           system: systemPrompt,
           messages: [{ role: "user", content: contentArray }],
           temperature: options.temperature ?? 0.7,
+          ...(options.stream ? { stream: true } : {}),
         }),
       });
 
-      const resJson = await res.json().catch(() => ({}));
       if (!res.ok) {
+        // Anthropic returns a single JSON error object on failure whether or not `stream` was
+        // requested — never an SSE body for an error — so this parse is always safe here.
+        const resJson = await res.json().catch(() => ({}));
         const errorMsg = resJson.error?.message || resJson.error?.type || "Anthropic API error";
         const errorType = resJson.error?.type || "";
         console.warn(`[gateway] Claude key failed: ${selectedKeyLabel}. Status: ${res.status}. Error: ${errorMsg}`);
@@ -77,6 +81,19 @@ export const claudeAdapter: ProviderAdapter = {
         return { success: false, aiResponseText: "", promptTokens: 0, completionTokens: 0, errorMsg, status: res.status };
       }
 
+      if (options.stream && res.body) {
+        return {
+          success: true,
+          aiResponseText: "",
+          promptTokens: 0,
+          completionTokens: 0,
+          errorMsg: "",
+          status: 200,
+          streamChunks: parseAnthropicSse(res.body),
+        };
+      }
+
+      const resJson = await res.json();
       const aiResponseText = resJson.content?.[0]?.text || "";
       const promptTokens = resJson.usage?.input_tokens || 0;
       const completionTokens = resJson.usage?.output_tokens || 0;

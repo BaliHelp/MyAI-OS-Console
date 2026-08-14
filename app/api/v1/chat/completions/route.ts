@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { decryptKey, hashApiKey } from "@/lib/crypto";
 import { parseUploadedFile, type ParsedFileResult } from "@/lib/file-parser";
+import { saveToDataCenter } from "@/lib/data-center";
 import fs from "fs";
 import path from "path";
 
@@ -485,6 +486,7 @@ ${liveDiagnosticSummary}
     let tierUsed = 1;
     let providerUsed = "";
     let toolCallsResult: import("@/lib/provider-adapters").ToolCall[] | undefined;
+    let streamChunksResult: AsyncGenerator<import("@/lib/provider-adapters").StreamChunk> | undefined;
     const startTime = Date.now();
 
     // Group assignments by pool_tier
@@ -599,6 +601,7 @@ ${liveDiagnosticSummary}
             promptTokens = resCall.promptTokens;
             completionTokens = resCall.completionTokens;
             toolCallsResult = resCall.toolCalls;
+            streamChunksResult = resCall.streamChunks;
             success = true;
             break tierOuterLoop;
           } else {
@@ -702,6 +705,7 @@ ${liveDiagnosticSummary}
           promptTokens = resCall.promptTokens;
           completionTokens = resCall.completionTokens;
           toolCallsResult = resCall.toolCalls;
+          streamChunksResult = resCall.streamChunks;
           success = true;
 
           // Reset cooldown stats on success
@@ -775,173 +779,238 @@ ${liveDiagnosticSummary}
       );
     }
 
-    const latencyMs = Date.now() - startTime;
-    const totalTokens = promptTokens + completionTokens;
+    // 7. Stats updates, Data Center logging, and response envelope construction — shared by both
+    // the buffered JSON path and the SSE streaming path (called once the stream has fully drained
+    // so token counts/text are final). Takes the winning text + token counts explicitly rather
+    // than closing over the outer `aiResponseText`/`promptTokens`/`completionTokens`, since the
+    // streaming path only knows the real values after consuming the whole generator.
+    //
+    // `keyData` is re-bound here because TS does not carry the earlier `!keyData` null-check
+    // narrowing into a nested function's closure.
+    const keyDataChecked = keyData;
+    async function finalizeAndLog(
+      finalText: string,
+      finalPromptTokens: number,
+      finalCompletionTokens: number
+    ): Promise<Record<string, any>> {
+      const latencyMs = Date.now() - startTime;
+      const totalTokens = finalPromptTokens + finalCompletionTokens;
 
-    // 7. Update LRU & Stats async
-    if (supabaseAdmin) {
-      if (selectedKeyId) {
+      // Update LRU & Stats async
+      if (supabaseAdmin) {
+        if (selectedKeyId) {
+          await supabaseAdmin
+            .from("gw_provider_keys")
+            .update({
+              usage_count: selectedUsageCount + 1,
+              last_used_at: new Date().toISOString(),
+            })
+            .eq("id", selectedKeyId);
+        }
+
         await supabaseAdmin
-          .from("gw_provider_keys")
-          .update({
-            usage_count: selectedUsageCount + 1,
-            last_used_at: new Date().toISOString(),
-          })
-          .eq("id", selectedKeyId);
+          .from("gw_api_keys")
+          .update({ last_used_at: new Date().toISOString() })
+          .eq("id", keyDataChecked.id);
+
+        const isOcrField = fieldKey.startsWith("ocr_") || fieldKey === "visa_registration_extraction";
+        const isFallbackToGpt    = isOcrField && providerUsed === "gpt";
+        const isFallbackToClaude = isOcrField && providerUsed === "claude";
+
+        // Log usage transaction
+        await supabaseAdmin.from("gw_usage_logs").insert({
+          api_key_id: keyDataChecked.id,
+          app_name: appName,
+          provider: providerUsed,
+          task_type: "text",
+          tokens_used: totalTokens,
+          prompt_tokens: finalPromptTokens,
+          completion_tokens: finalCompletionTokens,
+          latency_ms: latencyMs,
+          ip_address: req.headers.get("x-forwarded-for")?.split(",")[0] ?? "unknown",
+          field_key: fieldKey,
+          pool_tier_used: tierUsed,
+          ocr_fallback_to_gpt:    isFallbackToGpt,
+          ocr_fallback_to_claude: isFallbackToClaude
+        });
       }
 
-      await supabaseAdmin
-        .from("gw_api_keys")
-        .update({ last_used_at: new Date().toISOString() })
-        .eq("id", keyData.id);
+      // Return wrapped response in standard envelope
+      let result: any = finalText;
+      let dataCenterId: string | null = null;
 
-      const isOcrField = fieldKey.startsWith("ocr_") || fieldKey === "visa_registration_extraction";
-      const isFallbackToGpt    = isOcrField && providerUsed === "gpt";
-      const isFallbackToClaude = isOcrField && providerUsed === "claude";
+      if (fieldSpec?.output_schema) {
+        try {
+          const cleanedText = finalText.replace(/```json/g, "").replace(/```/g, "").trim();
+          result = JSON.parse(cleanedText);
 
-      // Log usage transaction
-      await supabaseAdmin.from("gw_usage_logs").insert({
-        api_key_id: keyData.id,
-        app_name: appName,
-        provider: providerUsed,
-        task_type: "text",
-        tokens_used: totalTokens,
-        prompt_tokens: promptTokens,
-        completion_tokens: completionTokens,
-        latency_ms: latencyMs,
-        ip_address: req.headers.get("x-forwarded-for")?.split(",")[0] ?? "unknown",
-        field_key: fieldKey,
-        pool_tier_used: tierUsed,
-        ocr_fallback_to_gpt:    isFallbackToGpt,
-        ocr_fallback_to_claude: isFallbackToClaude
+          dataCenterId = await saveToDataCenter({
+            client_app_id: keyDataChecked.client_app_id,
+            field_key: fieldKey,
+            source_type: "ocr_upload",
+            extracted_data: result,
+            // Untuk dokumen teks: simpan teks yang diekstrak, bukan response JSON mentah
+            raw_text: uploadedFile?.extractedText || finalText,
+            // Simpan file ORIGINAL (bukan konversi WebP)
+            fileBase64: uploadedFile ? `data:${uploadedFile.originalMimeType};base64,${uploadedFile.originalBase64}` : fileBase64,
+            fileMimeType: uploadedFile?.originalMimeType || null
+          });
+        } catch (e) {
+          console.warn("[gateway] Failed to parse structured output JSON or save to Data Center:", e);
+        }
+      }
+
+      // Log ALL non-OCR AI interactions to Data Center with COMPLETE data
+      //    (chatbot, content, reasoning, structured extraction, etc.)
+      if (supabaseAdmin && !fieldSpec?.output_schema) {
+        const isChatbot    = fieldKey.startsWith("chatbot_") || fieldKey === "chatbot";
+        const isContent    = fieldKey.startsWith("content_");
+        const isReasoning  = fieldKey === "reasoning_general";
+        const isStructured = fieldKey === "structured_extraction";
+
+        if (isChatbot || isContent || isReasoning || isStructured) {
+          try {
+            // Full messages array (all turns in the conversation)
+            const allMessages: Array<{ role: string; content: string }> = [];
+            if (body.messages && Array.isArray(body.messages)) {
+              body.messages.forEach((m: any) => {
+                if (m.role !== "system" && typeof m.content === "string") {
+                  allMessages.push({ role: m.role, content: m.content });
+                }
+              });
+            } else {
+              allMessages.push({ role: "user", content: prompt });
+            }
+            // Append the AI response as final turn
+            allMessages.push({ role: "assistant", content: finalText });
+
+            // Human-readable transcript for quick review
+            const transcript = allMessages
+              .map(m => `[${m.role.toUpperCase()}] ${m.content}`)
+              .join("\n---\n");
+
+            // Provider display name (shows full label like "GPT Key 3", "Gemini Key 2", etc.)
+            const PROVIDER_DISPLAY: Record<string, string> = {
+              gemini:  "Gemini",
+              gpt:     "OpenAI GPT",
+              claude:  "Anthropic Claude",
+              deepseek:"DeepSeek",
+              grok:    "Grok (xAI)",
+              glm:     "GLM (Zhipu AI)",
+              kimi:    "Kimi (Moonshot AI)",
+              openrouter: "OpenRouter",
+            };
+
+            await saveToDataCenter({
+              client_app_id: keyDataChecked.client_app_id,
+              field_key: fieldKey,
+              source_type: isChatbot ? "chatbot_interaction" : "content_generation",
+              raw_text: transcript,
+              language: "auto",
+              tags: [
+                fieldKey,
+                providerUsed,
+                appName,
+                isChatbot ? "chat" : isContent ? "content" : isReasoning ? "reasoning" : "structured",
+              ],
+              extracted_data: {
+                // ── Identity ─────────────────────────────────────────────────
+                source_app:        appName,
+                client_app_id:     keyDataChecked.client_app_id,
+                field_key:         fieldKey,
+                // ── Provider ─────────────────────────────────────────────────
+                provider:          providerUsed,
+                provider_display:  PROVIDER_DISPLAY[providerUsed] || providerUsed,
+                key_label:         selectedKeyLabel,       // e.g. "GPT Key 3"
+                tier_used:         tierUsed,
+                // ── Conversation ─────────────────────────────────────────────
+                messages:          allMessages,            // full turn-by-turn history
+                turn_count:        allMessages.length,
+                user_message:      prompt.substring(0, 2000),
+                ai_response:       finalText.substring(0, 4000),
+                // ── Performance ──────────────────────────────────────────────
+                prompt_tokens:     finalPromptTokens,
+                completion_tokens: finalCompletionTokens,
+                total_tokens:      totalTokens,
+                latency_ms:        latencyMs,
+                // ── Timestamp ────────────────────────────────────────────────
+                processed_at:      new Date().toISOString(),
+              },
+            });
+          } catch (e) {
+            console.warn("[gateway] Failed to log AI interaction to Data Center:", e);
+          }
+        }
+      }
+
+      return {
+        field: fieldKey,
+        schema_version: "1.0",
+        provider_used: providerUsed,
+        processed_at: new Date().toISOString(),
+        result: result,
+        // OpenAI-compatible: same shape as choices[0].message.tool_calls. Present only when the
+        // model chose to call a tool for this turn — the caller executes it and sends the result
+        // back as a new role:"tool" message to continue the conversation.
+        ...(toolCallsResult && toolCallsResult.length > 0 ? { tool_calls: toolCallsResult } : {}),
+        ...(dataCenterId ? { data_center_id: dataCenterId } : {})
+      };
+    }
+
+    // 8. SSE streaming response. The winning candidate returned an async generator instead of a
+    // finished string — relay each delta to the client as it arrives, then run the exact same
+    // stats/logging/envelope logic as the buffered path once the generator drains, and emit it as
+    // a final `done` event so streaming and non-streaming callers get identical persisted data.
+    if (streamChunksResult) {
+      const chunkGenerator = streamChunksResult;
+      const encoder = new TextEncoder();
+
+      const readable = new ReadableStream<Uint8Array>({
+        async start(controller) {
+          let accumulatedText = "";
+          let finalPromptTokens = promptTokens;
+          let finalCompletionTokens = completionTokens;
+
+          try {
+            for await (const chunk of chunkGenerator) {
+              if (chunk.delta) {
+                accumulatedText += chunk.delta;
+                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ delta: chunk.delta })}\n\n`));
+              }
+              if (chunk.promptTokens !== undefined) finalPromptTokens = chunk.promptTokens;
+              if (chunk.completionTokens !== undefined) finalCompletionTokens = chunk.completionTokens;
+            }
+
+            const payload = await finalizeAndLog(accumulatedText, finalPromptTokens, finalCompletionTokens);
+            controller.enqueue(
+              encoder.encode(`data: ${JSON.stringify({ done: true, ...payload })}\n\n`)
+            );
+            controller.enqueue(encoder.encode(`data: [DONE]\n\n`));
+          } catch (err: any) {
+            console.error("[gateway] Streaming error:", err);
+            controller.enqueue(
+              encoder.encode(`data: ${JSON.stringify({ error: err.message || "Streaming error" })}\n\n`)
+            );
+          } finally {
+            controller.close();
+          }
+        },
+      });
+
+      return new Response(readable, {
+        status: 200,
+        headers: {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache, no-transform",
+          "Connection": "keep-alive",
+          "X-Accel-Buffering": "no",
+        },
       });
     }
 
-    // 8. Return wrapped response in standard envelope
-    let result: any = aiResponseText;
-    let dataCenterId: string | null = null;
-    
-    if (fieldSpec?.output_schema) {
-      try {
-        const cleanedText = aiResponseText.replace(/```json/g, "").replace(/```/g, "").trim();
-        result = JSON.parse(cleanedText);
-
-        const { saveToDataCenter } = require("@/lib/data-center");
-        dataCenterId = await saveToDataCenter({
-          client_app_id: keyData.client_app_id,
-          field_key: fieldKey,
-          source_type: "ocr_upload",
-          extracted_data: result,
-          // Untuk dokumen teks: simpan teks yang diekstrak, bukan response JSON mentah
-          raw_text: uploadedFile?.extractedText || aiResponseText,
-          // Simpan file ORIGINAL (bukan konversi WebP)
-          fileBase64: uploadedFile ? `data:${uploadedFile.originalMimeType};base64,${uploadedFile.originalBase64}` : fileBase64,
-          fileMimeType: uploadedFile?.originalMimeType || null
-        });
-      } catch (e) {
-        console.warn("[gateway] Failed to parse structured output JSON or save to Data Center:", e);
-      }
-    }
-
-    // 9. Log ALL non-OCR AI interactions to Data Center with COMPLETE data
-    //    (chatbot, content, reasoning, structured extraction, etc.)
-    if (supabaseAdmin && !fieldSpec?.output_schema) {
-      const isChatbot    = fieldKey.startsWith("chatbot_") || fieldKey === "chatbot";
-      const isContent    = fieldKey.startsWith("content_");
-      const isReasoning  = fieldKey === "reasoning_general";
-      const isStructured = fieldKey === "structured_extraction";
-
-      if (isChatbot || isContent || isReasoning || isStructured) {
-        try {
-          const { saveToDataCenter } = require("@/lib/data-center");
-
-          // Full messages array (all turns in the conversation)
-          const allMessages: Array<{ role: string; content: string }> = [];
-          if (body.messages && Array.isArray(body.messages)) {
-            body.messages.forEach((m: any) => {
-              if (m.role !== "system" && typeof m.content === "string") {
-                allMessages.push({ role: m.role, content: m.content });
-              }
-            });
-          } else {
-            allMessages.push({ role: "user", content: prompt });
-          }
-          // Append the AI response as final turn
-          allMessages.push({ role: "assistant", content: aiResponseText });
-
-          // Human-readable transcript for quick review
-          const transcript = allMessages
-            .map(m => `[${m.role.toUpperCase()}] ${m.content}`)
-            .join("\n---\n");
-
-          // Provider display name (shows full label like "GPT Key 3", "Gemini Key 2", etc.)
-          const PROVIDER_DISPLAY: Record<string, string> = {
-            gemini:  "Gemini",
-            gpt:     "OpenAI GPT",
-            claude:  "Anthropic Claude",
-            deepseek:"DeepSeek",
-            grok:    "Grok (xAI)",
-            glm:     "GLM (Zhipu AI)",
-            kimi:    "Kimi (Moonshot AI)",
-            openrouter: "OpenRouter",
-          };
-
-          await saveToDataCenter({
-            client_app_id: keyData.client_app_id,
-            field_key: fieldKey,
-            source_type: isChatbot ? "chatbot_interaction" : "content_generation",
-            raw_text: transcript,
-            language: "auto",
-            tags: [
-              fieldKey,
-              providerUsed,
-              appName,
-              isChatbot ? "chat" : isContent ? "content" : isReasoning ? "reasoning" : "structured",
-            ],
-            extracted_data: {
-              // ── Identity ─────────────────────────────────────────────────
-              source_app:        appName,
-              client_app_id:     keyData.client_app_id,
-              field_key:         fieldKey,
-              // ── Provider ─────────────────────────────────────────────────
-              provider:          providerUsed,
-              provider_display:  PROVIDER_DISPLAY[providerUsed] || providerUsed,
-              key_label:         selectedKeyLabel,       // e.g. "GPT Key 3"
-              tier_used:         tierUsed,
-              // ── Conversation ─────────────────────────────────────────────
-              messages:          allMessages,            // full turn-by-turn history
-              turn_count:        allMessages.length,
-              user_message:      prompt.substring(0, 2000),
-              ai_response:       aiResponseText.substring(0, 4000),
-              // ── Performance ──────────────────────────────────────────────
-              prompt_tokens:     promptTokens,
-              completion_tokens: completionTokens,
-              total_tokens:      totalTokens,
-              latency_ms:        latencyMs,
-              // ── Timestamp ────────────────────────────────────────────────
-              processed_at:      new Date().toISOString(),
-            },
-          });
-        } catch (e) {
-          console.warn("[gateway] Failed to log AI interaction to Data Center:", e);
-        }
-      }
-    }
-
-
-
-    return NextResponse.json({
-      field: fieldKey,
-      schema_version: "1.0",
-      provider_used: providerUsed,
-      processed_at: new Date().toISOString(),
-      result: result,
-      // OpenAI-compatible: same shape as choices[0].message.tool_calls. Present only when the
-      // model chose to call a tool for this turn — the caller executes it and sends the result
-      // back as a new role:"tool" message to continue the conversation.
-      ...(toolCallsResult && toolCallsResult.length > 0 ? { tool_calls: toolCallsResult } : {}),
-      ...(dataCenterId ? { data_center_id: dataCenterId } : {})
-    });
+    // 9. Buffered (non-streaming) response
+    const payload = await finalizeAndLog(aiResponseText, promptTokens, completionTokens);
+    return NextResponse.json(payload);
 
   } catch (err: any) {
     return NextResponse.json({ error: err.message || "Gateway internal server error" }, { status: 500 });
@@ -983,6 +1052,13 @@ export async function attemptCall(
       // see the tier-loop filter above). Harmless no-ops for every other adapter.
       tools: body.tools,
       messages: Array.isArray(body.messages) ? body.messages : undefined,
+      // Server-Sent Events streaming — never combined with tools (streaming tool-call deltas is
+      // a separate feature this doesn't attempt yet), so a caller asking for both is silently
+      // downgraded to a single buffered JSON response rather than erroring, since every existing
+      // tools caller predates `stream` and shouldn't have to know about the interaction. The SSE
+      // response branch in POST() is gated on whether the adapter actually returned a
+      // `streamChunks` generator, not on this flag directly.
+      stream: body.stream === true && !(Array.isArray(body.tools) && body.tools.length > 0),
     },
     parsedFile ?? null,
     selectedKeyId,

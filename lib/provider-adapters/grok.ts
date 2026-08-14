@@ -1,5 +1,6 @@
 import type { ProviderAdapter } from "./types";
 import { supabaseAdmin } from "@/lib/supabase";
+import { parseOpenAiSse } from "./sse-utils";
 
 async function autoDisableKey(selectedKeyId: string | null | undefined, selectedKeyLabel: string) {
   if (selectedKeyId && supabaseAdmin) {
@@ -29,11 +30,12 @@ export const grokAdapter: ProviderAdapter = {
             { role: "user", content: prompt },
           ],
           temperature: options.temperature ?? 0.7,
+          ...(options.stream ? { stream: true, stream_options: { include_usage: true } } : {}),
         }),
       });
 
-      const resJson = await res.json().catch(() => ({}));
       if (!res.ok) {
+        const resJson = await res.json().catch(() => ({}));
         const errorMsg = resJson.error?.message || "Grok API error";
         console.warn(`[gateway] Grok key failed: ${selectedKeyLabel}. Status: ${res.status}. Error: ${errorMsg}`);
         if (res.status === 400) return { success: false, aiResponseText: "", promptTokens: 0, completionTokens: 0, errorMsg, status: 400 };
@@ -41,6 +43,19 @@ export const grokAdapter: ProviderAdapter = {
         return { success: false, aiResponseText: "", promptTokens: 0, completionTokens: 0, errorMsg, status: res.status };
       }
 
+      if (options.stream && res.body) {
+        return {
+          success: true,
+          aiResponseText: "",
+          promptTokens: 0,
+          completionTokens: 0,
+          errorMsg: "",
+          status: 200,
+          streamChunks: parseOpenAiSse(res.body),
+        };
+      }
+
+      const resJson = await res.json();
       const aiResponseText = resJson.choices?.[0]?.message?.content || "";
       const promptTokens = resJson.usage?.prompt_tokens || 0;
       const completionTokens = resJson.usage?.completion_tokens || 0;

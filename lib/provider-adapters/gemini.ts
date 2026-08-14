@@ -6,6 +6,7 @@ import {
   markGeminiKeyInvalid,
   type GeminiKeyCandidate,
 } from "@/lib/gemini-key-pool";
+import { singleChunkStream } from "./sse-utils";
 
 // ── Gemini model cascade ─────────────────────────────────────────────────────
 // Primary model is tried first; if it returns non-200, fallback is used.
@@ -55,7 +56,7 @@ export const geminiAdapter: ProviderAdapter = {
     providerApiKey: string,
     prompt: string,
     systemPrompt: string,
-    options: { temperature?: number; max_tokens?: number; model_name?: string },
+    options: { temperature?: number; max_tokens?: number; model_name?: string; stream?: boolean },
     fileData?: FileData | null,
     selectedKeyId?: string | null,
     selectedKeyLabel = ""
@@ -132,7 +133,20 @@ export const geminiAdapter: ProviderAdapter = {
           markGeminiKeySuccess(candidate).catch(() => {});
 
           console.log(`[gemini-pool] ✅ Success with key "${candidate.label}"`);
-          return { success: true, aiResponseText, promptTokens, completionTokens, errorMsg: "", status: 200 };
+          // No real incremental streaming support yet — when `stream` was requested, wrap the
+          // already-complete response as a single-chunk generator so the gateway's SSE contract
+          // still holds (caller gets a valid stream, just not progressive for this provider).
+          return options.stream
+            ? {
+                success: true,
+                aiResponseText: "",
+                promptTokens: 0,
+                completionTokens: 0,
+                errorMsg: "",
+                status: 200,
+                streamChunks: singleChunkStream(aiResponseText, promptTokens, completionTokens),
+              }
+            : { success: true, aiResponseText, promptTokens, completionTokens, errorMsg: "", status: 200 };
         }
 
         // ── Handle errors ──────────────────────────────────────────────────

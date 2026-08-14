@@ -33,4 +33,4 @@ export function getSupportedProviders(): string[] {
   return Object.keys(PROVIDER_REGISTRY);
 }
 
-export type { ProviderAdapter, FileData, AttemptCallResult, ToolDefinition, ToolCall } from "./types";
+export type { ProviderAdapter, FileData, AttemptCallResult, ToolDefinition, ToolCall, StreamChunk } from "./types";
