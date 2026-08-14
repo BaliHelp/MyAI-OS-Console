@@ -1,6 +1,11 @@
 import type { ProviderAdapter } from "./types";
 import { supabaseAdmin } from "@/lib/supabase";
 
+// grok-2 no longer exists ("Model not found: grok-2", confirmed live against x.ai's API) — the
+// dashboard's own provider dropdown label already referenced "Grok-4.5" as the intended model,
+// so this default had drifted out of sync with what the rest of the product assumed was in use.
+export const GROK_DEFAULT_MODEL = "grok-4.5";
+
 async function autoDisableKey(selectedKeyId: string | null | undefined, selectedKeyLabel: string) {
   if (selectedKeyId && supabaseAdmin) {
     console.warn(`[gateway] Auto-disabling key in DB: ${selectedKeyLabel}`);
@@ -23,7 +28,7 @@ export const grokAdapter: ProviderAdapter = {
           Authorization: `Bearer ${providerApiKey}`,
         },
         body: JSON.stringify({
-          model: options.model_name || "grok-2",
+          model: options.model_name || GROK_DEFAULT_MODEL,
           messages: [
             { role: "system", content: systemPrompt },
             { role: "user", content: prompt },
@@ -34,7 +39,14 @@ export const grokAdapter: ProviderAdapter = {
 
       const resJson = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const errorMsg = resJson.error?.message || "Grok API error";
+        // x.ai returns {code, error: "<string>"} on failure — not OpenAI's {error:{message}}
+        // shape every other provider here uses. Reading resJson.error?.message on that shape is
+        // always undefined, which silently collapsed every real Grok error down to the generic
+        // "Grok API error" string in logs. Handle both shapes.
+        const errorMsg =
+          resJson.error?.message ||
+          (typeof resJson.error === "string" ? resJson.error : null) ||
+          "Grok API error";
         console.warn(`[gateway] Grok key failed: ${selectedKeyLabel}. Status: ${res.status}. Error: ${errorMsg}`);
         if (res.status === 400) return { success: false, aiResponseText: "", promptTokens: 0, completionTokens: 0, errorMsg, status: 400 };
         if (res.status === 401 || res.status === 403) await autoDisableKey(selectedKeyId, selectedKeyLabel);

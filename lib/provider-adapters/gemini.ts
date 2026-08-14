@@ -8,16 +8,20 @@ import {
 } from "@/lib/gemini-key-pool";
 
 // ── Gemini model cascade ─────────────────────────────────────────────────────
-// Primary model is tried first; if it returns non-200, fallback is used.
-const PRIMARY_MODEL   = "gemini-2.5-flash-lite";
-const FALLBACK_MODEL  = "gemini-2.5-flash";
+// Default primary/fallback when a key has no model_name override configured.
+// The previous pair (gemini-2.5-flash-lite / gemini-2.5-flash) 404s with "no
+// longer available to new users" — confirmed live against Google's API.
+export const GEMINI_PRIMARY_MODEL  = "gemini-3.5-flash-lite";
+export const GEMINI_FALLBACK_MODEL = "gemini-flash-lite-latest";
 
 async function callGeminiApi(
   apiKey: string,
-  body: object
+  body: object,
+  models: string[]
 ): Promise<{ ok: boolean; status: number; json: any }> {
-  // Try primary model first
-  for (const model of [PRIMARY_MODEL, FALLBACK_MODEL]) {
+  // Try each model in order; fall through to the next on failure.
+  for (let i = 0; i < models.length; i++) {
+    const model = models[i];
     const res = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
       {
@@ -28,15 +32,15 @@ async function callGeminiApi(
     );
     const json = await res.json().catch(() => ({}));
     if (res.ok) return { ok: true, status: 200, json };
-    // If primary fails for non-quota reasons, fall through to next model
-    if (model === PRIMARY_MODEL && !res.ok) {
-      console.warn(`[gemini] ${PRIMARY_MODEL} → ${res.status} (${json.error?.message}). Retrying with ${FALLBACK_MODEL}...`);
+    // Not the last model in the cascade — fall through and try the next one.
+    if (i < models.length - 1) {
+      console.warn(`[gemini] ${model} → ${res.status} (${json.error?.message}). Retrying with ${models[i + 1]}...`);
       continue;
     }
-    // Fallback also failed — return the error
+    // Last model in the cascade also failed — return the error.
     return { ok: false, status: res.status, json };
   }
-  return { ok: false, status: 500, json: { error: { message: "Both Gemini models failed" } } };
+  return { ok: false, status: 500, json: { error: { message: "All Gemini models in cascade failed" } } };
 }
 
 export const geminiAdapter: ProviderAdapter = {
@@ -73,6 +77,13 @@ export const geminiAdapter: ProviderAdapter = {
         maxOutputTokens: options.max_tokens ?? 2000,
       },
     };
+
+    // An explicit per-key override is tried first but still falls back to the safe default on
+    // failure, so a caller who mistakenly configures a dead model doesn't lose Gemini entirely —
+    // the connection test (lib/test-provider-connection.ts) is what surfaces a dead override.
+    const modelsToTry = options.model_name
+      ? Array.from(new Set([options.model_name, GEMINI_FALLBACK_MODEL]))
+      : [GEMINI_PRIMARY_MODEL, GEMINI_FALLBACK_MODEL];
 
     // ── Fetch the full live key pool ─────────────────────────────────────────
     let candidates: GeminiKeyCandidate[] = [];
@@ -121,7 +132,7 @@ export const geminiAdapter: ProviderAdapter = {
     // ── Try each key in order ────────────────────────────────────────────────
     for (const candidate of candidates) {
       try {
-        const { ok, status, json } = await callGeminiApi(candidate.apiKey, requestBody);
+        const { ok, status, json } = await callGeminiApi(candidate.apiKey, requestBody, modelsToTry);
 
         if (ok) {
           const aiResponseText = json.candidates?.[0]?.content?.parts?.[0]?.text || "";

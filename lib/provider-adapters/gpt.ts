@@ -1,6 +1,8 @@
 import type { ProviderAdapter, FileData } from "./types";
 import { supabaseAdmin } from "@/lib/supabase";
 
+export const GPT_DEFAULT_MODEL = "gpt-4o-mini";
+
 async function autoDisableKey(selectedKeyId: string | null | undefined, selectedKeyLabel: string) {
   if (selectedKeyId && supabaseAdmin) {
     console.warn(`[gateway] Auto-disabling key in DB: ${selectedKeyLabel}`);
@@ -71,7 +73,7 @@ export const gptAdapter: ProviderAdapter = {
         }
 
         requestBody = {
-          model: options.model_name || "gpt-4o-mini",
+          model: options.model_name || GPT_DEFAULT_MODEL,
           messages: [
             { role: "system", content: systemPrompt },
             { role: "user", content: contentArray },

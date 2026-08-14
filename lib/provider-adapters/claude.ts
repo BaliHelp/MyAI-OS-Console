@@ -1,6 +1,8 @@
 import type { ProviderAdapter, FileData } from "./types";
 import { supabaseAdmin } from "@/lib/supabase";
 
+export const CLAUDE_DEFAULT_MODEL = "claude-sonnet-4-5";
+
 async function autoDisableKey(selectedKeyId: string | null | undefined, selectedKeyLabel: string) {
   if (selectedKeyId && supabaseAdmin) {
     console.warn(`[gateway] Auto-disabling key in DB: ${selectedKeyLabel}`);
@@ -32,7 +34,7 @@ export const claudeAdapter: ProviderAdapter = {
           "anthropic-version": "2023-06-01",
         },
         body: JSON.stringify({
-          model: options.model_name || "claude-sonnet-4-5",
+          model: options.model_name || CLAUDE_DEFAULT_MODEL,
           max_tokens: options.max_tokens ?? 2000,
           system: systemPrompt,
           messages: [{ role: "user", content: contentArray }],
