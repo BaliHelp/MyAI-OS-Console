@@ -8,11 +8,11 @@
  */
 
 import type { ProviderAdapter } from "./types";
-import { geminiAdapter } from "./gemini";
-import { gptAdapter } from "./gpt";
-import { claudeAdapter } from "./claude";
-import { grokAdapter } from "./grok";
-import { deepseekAdapter } from "./deepseek";
+import { geminiAdapter, GEMINI_PRIMARY_MODEL } from "./gemini";
+import { gptAdapter, GPT_DEFAULT_MODEL } from "./gpt";
+import { claudeAdapter, CLAUDE_DEFAULT_MODEL } from "./claude";
+import { grokAdapter, GROK_DEFAULT_MODEL } from "./grok";
+import { deepseekAdapter, DEEPSEEK_DEFAULT_MODEL } from "./deepseek";
 import { customOpenaiAdapter } from "./custom-openai-compatible";
 
 export const PROVIDER_REGISTRY: Record<string, ProviderAdapter> = {
@@ -23,6 +23,20 @@ export const PROVIDER_REGISTRY: Record<string, ProviderAdapter> = {
   deepseek: deepseekAdapter,
   others: customOpenaiAdapter,
   custom_openai: customOpenaiAdapter,
+};
+
+/**
+ * Single source of truth for each provider's default chat-completion model — the model actually
+ * used when a gw_provider_keys row has no model_name override. Kept here (not re-typed at each
+ * call site) so the dashboard/connection-test can display and probe the real default instead of
+ * drifting out of sync with what the adapters actually request.
+ */
+export const DEFAULT_MODEL_BY_PROVIDER: Record<string, string> = {
+  gemini: GEMINI_PRIMARY_MODEL,
+  gpt: GPT_DEFAULT_MODEL,
+  claude: CLAUDE_DEFAULT_MODEL,
+  grok: GROK_DEFAULT_MODEL,
+  deepseek: DEEPSEEK_DEFAULT_MODEL,
 };
 
 /**

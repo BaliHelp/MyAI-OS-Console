@@ -74,19 +74,34 @@ export async function DELETE(req: NextRequest) {
   return NextResponse.json({ success: true });
 }
 
-// PATCH to toggle status (active/disabled)
+// PATCH to update status (active/disabled) and/or model_name/base_url.
+// model_name/base_url are distinguished from "not provided" via `in` checks (not `!== undefined`
+// alone) so a caller can explicitly clear either back to null (revert to the adapter default)
+// by sending `model_name: null`, not just omit the field.
 export async function PATCH(req: NextRequest) {
   if (!supabaseAdmin) {
     return NextResponse.json({ error: "Database not configured" }, { status: 503 });
   }
-  const { id, status } = await req.json();
-  if (!id || !status) return NextResponse.json({ error: "id and status are required" }, { status: 400 });
+  const body = await req.json();
+  const { id } = body;
+  const hasStatus = "status" in body;
+  const hasModelName = "model_name" in body;
+  const hasBaseUrl = "base_url" in body;
+
+  if (!id || (!hasStatus && !hasModelName && !hasBaseUrl)) {
+    return NextResponse.json({ error: "id and at least one of status/model_name/base_url are required" }, { status: 400 });
+  }
+
+  const update: Record<string, unknown> = {};
+  if (hasStatus) update.status = body.status;
+  if (hasModelName) update.model_name = body.model_name;
+  if (hasBaseUrl) update.base_url = body.base_url;
 
   const { data, error } = await supabaseAdmin
     .from("gw_provider_keys")
-    .update({ status })
+    .update(update)
     .eq("id", id)
-    .select("id, provider, label, status, usage_count, last_used_at")
+    .select("id, provider, label, status, usage_count, last_used_at, base_url, model_name")
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

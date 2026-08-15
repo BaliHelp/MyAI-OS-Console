@@ -1,9 +1,21 @@
 'use client';
 
 import { useState, useEffect, FormEvent } from "react";
-import { User, Sun, Moon, Sliders, ExternalLink, Code, KeyRound, Trash2, ToggleLeft, ToggleRight, Sparkles, ShieldCheck, Eye, EyeOff } from "lucide-react";
+import { User, Sun, Moon, Sliders, ExternalLink, Code, KeyRound, Trash2, ToggleLeft, ToggleRight, Sparkles, ShieldCheck, Eye, EyeOff, Pencil } from "lucide-react";
 import { Language } from "@/lib/types";
 import { translations } from "@/lib/i18n";
+
+// Mirrors lib/provider-adapters' DEFAULT_MODEL_BY_PROVIDER — duplicated here (not imported)
+// because this is a 'use client' component and lib/provider-adapters/* pulls in server-only
+// dependencies. Shown as a placeholder/fallback label only; the actual default used at request
+// time always comes from the adapter, this is purely for dashboard transparency.
+const DEFAULT_MODEL_BY_PROVIDER: Record<string, string> = {
+  gemini: "gemini-3.5-flash-lite",
+  gpt: "gpt-4o-mini",
+  claude: "claude-sonnet-4-5",
+  grok: "grok-2",
+  deepseek: "deepseek-chat",
+};
 
 interface SettingsTabProps {
   lang: Language;
@@ -64,6 +76,11 @@ export default function SettingsTab({ lang, setLang, theme, setTheme, adminEmail
 
   // Delete confirmation state (inline 2-step, no browser confirm() popup)
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+
+  // Inline model-name edit state (same 2-step interaction pattern as delete confirm)
+  const [editingModelId, setEditingModelId] = useState<string | null>(null);
+  const [editModelValue, setEditModelValue] = useState("");
+  const [savingModelId, setSavingModelId] = useState<string | null>(null);
 
   // Test Connection States & Helper
   const [testingKeys, setTestingKeys] = useState<Record<string, boolean>>({});
@@ -223,12 +240,12 @@ export default function SettingsTab({ lang, setLang, theme, setTheme, adminEmail
       const res = await fetch("/api/provider-keys", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          provider, 
-          label, 
+        body: JSON.stringify({
+          provider,
+          label,
           api_key: apiKey,
           base_url: provider === "others" ? baseUrl : null,
-          model_name: provider === "others" ? modelName : null
+          model_name: modelName.trim() || null
         }),
       });
 
@@ -279,6 +296,25 @@ export default function SettingsTab({ lang, setLang, theme, setTheme, adminEmail
       }
     } catch (err) {
       console.error("Error updating key status:", err);
+    }
+  };
+
+  const handleSaveModel = async (id: string) => {
+    setSavingModelId(id);
+    try {
+      const res = await fetch("/api/provider-keys", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, model_name: editModelValue.trim() || null }),
+      });
+      if (res.ok) {
+        setEditingModelId(null);
+        await fetchProviderKeys();
+      }
+    } catch (err) {
+      console.error("Error updating model name:", err);
+    } finally {
+      setSavingModelId(null);
     }
   };
 
@@ -506,8 +542,8 @@ export default function SettingsTab({ lang, setLang, theme, setTheme, adminEmail
                   </div>
                 </div>
 
-                {provider === "others" && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-3 rounded-xl bg-bento-surface border border-bento-border animate-fade-in">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-3 rounded-xl bg-bento-surface border border-bento-border animate-fade-in">
+                  {provider === "others" && (
                     <div className="space-y-1">
                       <label className="text-[10px] font-bold uppercase tracking-wider text-bento-text-secondary">Base URL API Gateway</label>
                       <input
@@ -519,19 +555,26 @@ export default function SettingsTab({ lang, setLang, theme, setTheme, adminEmail
                         className="w-full px-3 py-2 text-xs rounded-lg border border-bento-border bg-bento-surface-lighter text-bento-text-primary focus:outline-none focus:border-bento-accent"
                       />
                     </div>
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-bold uppercase tracking-wider text-bento-text-secondary">Model Name (Target Pool)</label>
-                      <input
-                        type="text"
-                        placeholder="google/gemini-2.5-flash / glm-4 / dll"
-                        required
-                        value={modelName}
-                        onChange={(e) => setModelName(e.target.value)}
-                        className="w-full px-3 py-2 text-xs rounded-lg border border-bento-border bg-bento-surface-lighter text-bento-text-primary focus:outline-none focus:border-bento-accent"
-                      />
-                    </div>
+                  )}
+                  <div className={`space-y-1 ${provider !== "others" ? "md:col-span-2" : ""}`}>
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-bento-text-secondary">
+                      Model Name {provider !== "others" && "(Opsional)"}
+                    </label>
+                    <input
+                      type="text"
+                      placeholder={provider === "others" ? "google/gemini-2.5-flash / glm-4 / dll" : `Default: ${DEFAULT_MODEL_BY_PROVIDER[provider] || "-"}`}
+                      required={provider === "others"}
+                      value={modelName}
+                      onChange={(e) => setModelName(e.target.value)}
+                      className="w-full px-3 py-2 text-xs rounded-lg border border-bento-border bg-bento-surface-lighter text-bento-text-primary focus:outline-none focus:border-bento-accent"
+                    />
+                    {provider !== "others" && (
+                      <p className="text-[10px] text-bento-text-secondary opacity-70">
+                        Kosongkan untuk pakai default: <span className="font-mono">{DEFAULT_MODEL_BY_PROVIDER[provider] || "-"}</span>
+                      </p>
+                    )}
                   </div>
-                )}
+                </div>
               </div>
 
               <div className="flex justify-end pt-2">
@@ -629,12 +672,57 @@ export default function SettingsTab({ lang, setLang, theme, setTheme, adminEmail
                           )}
                         </div>
                         
-                        {k.provider === 'others' && (
-                          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px] text-bento-text-secondary mt-1 bg-bento-surface px-2.5 py-1 rounded-lg border border-bento-border/50 w-fit">
+                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px] text-bento-text-secondary mt-1 bg-bento-surface px-2.5 py-1 rounded-lg border border-bento-border/50 w-fit">
+                          {k.provider === 'others' && (
                             <span>Base URL: <strong className="text-bento-text-primary font-mono select-all">{k.base_url || "-"}</strong></span>
-                            <span>Model: <strong className="text-bento-text-primary font-mono select-all">{k.model_name || "-"}</strong></span>
-                          </div>
-                        )}
+                          )}
+                          {editingModelId === k.id ? (
+                            <span className="flex items-center gap-1.5">
+                              Model:
+                              <input
+                                type="text"
+                                autoFocus
+                                value={editModelValue}
+                                onChange={(e) => setEditModelValue(e.target.value)}
+                                placeholder={DEFAULT_MODEL_BY_PROVIDER[k.provider] || "model name"}
+                                className="px-1.5 py-0.5 text-[10px] rounded border border-bento-accent bg-bento-surface-lighter text-bento-text-primary font-mono focus:outline-none w-40"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => handleSaveModel(k.id)}
+                                disabled={savingModelId === k.id}
+                                className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-bento-accent text-white hover:bg-bento-accent/90 disabled:opacity-50"
+                              >
+                                {savingModelId === k.id ? "..." : "Simpan"}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setEditingModelId(null)}
+                                className="px-1.5 py-0.5 text-[10px] font-bold rounded border border-bento-border text-bento-text-secondary hover:text-bento-text-primary"
+                              >
+                                Batal
+                              </button>
+                            </span>
+                          ) : (
+                            <span className="flex items-center gap-1">
+                              Model:{" "}
+                              <strong className="text-bento-text-primary font-mono select-all">
+                                {k.model_name || `(default: ${DEFAULT_MODEL_BY_PROVIDER[k.provider] || "-"})`}
+                              </strong>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingModelId(k.id);
+                                  setEditModelValue(k.model_name || "");
+                                }}
+                                title="Edit Model"
+                                className="text-bento-text-secondary hover:text-bento-accent focus:outline-none"
+                              >
+                                <Pencil className="h-2.5 w-2.5" />
+                              </button>
+                            </span>
+                          )}
+                        </div>
                       </div>
 
                       <div className="flex items-center gap-2.5 self-end md:self-auto">

@@ -2,6 +2,8 @@ import type { ProviderAdapter } from "./types";
 import { supabaseAdmin } from "@/lib/supabase";
 import { parseOpenAiSse } from "./sse-utils";
 
+export const DEEPSEEK_DEFAULT_MODEL = "deepseek-chat";
+
 async function autoDisableKey(selectedKeyId: string | null | undefined, selectedKeyLabel: string) {
   if (selectedKeyId && supabaseAdmin) {
     console.warn(`[gateway] Auto-disabling key in DB: ${selectedKeyLabel}`);
@@ -24,7 +26,7 @@ export const deepseekAdapter: ProviderAdapter = {
           Authorization: `Bearer ${providerApiKey}`,
         },
         body: JSON.stringify({
-          model: options.model_name || "deepseek-chat",
+          model: options.model_name || DEEPSEEK_DEFAULT_MODEL,
           messages: [
             { role: "system", content: systemPrompt },
             { role: "user", content: prompt },
