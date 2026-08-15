@@ -6,7 +6,7 @@ import { useState, useMemo, FormEvent } from "react";
 // This is the single source of truth for supported providers in the UI.
 // Kept in-component to avoid Next.js client/server boundary issues with lib/.
 // When adding a new provider: add adapter to lib/provider-adapters/, then add here.
-const SUPPORTED_PROVIDERS = ["gemini", "gpt", "claude", "grok", "deepseek", "others"];
+const SUPPORTED_PROVIDERS = ["gemini", "gpt", "claude", "grok", "deepseek", "deepseek_reasoning", "deepseek_top", "others"];
 import { 
   AppWindow, 
   Plus, 
@@ -521,7 +521,7 @@ export default function AppsTab({ apps, apiKeys, logs, lang, theme, onCreateApp,
                         >
                           <span className={`w-1.5 h-1.5 rounded-full ${isChecked ? 'bg-bento-accent animate-pulse' : 'bg-bento-text-secondary/50'}`} />
                           <span className="flex flex-col items-start leading-tight">
-                            <span>{prov}</span>
+                            <span>{prov.replace(/_/g, " ")}</span>
                           </span>
                         </button>
                       );

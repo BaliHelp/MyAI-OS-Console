@@ -34,7 +34,10 @@ export async function GET(req: NextRequest) {
     });
 
     const responseData = fields.map((f: any) => {
-      const fieldAsns = assignments.filter((a: any) => a.field_key === f.field_key);
+      // Scoped to the 'light' bucket — the dashboard's routing editor has no complexity-bucket
+      // switcher yet, so mixing in 'reasoning'/'top' rows here would collide on pool_tier (see
+      // handleSaveAssignments in RoutingTab.tsx, which only ever saves to 'light' too).
+      const fieldAsns = assignments.filter((a: any) => a.field_key === f.field_key && (a.complexity ?? "light") === "light");
       return {
         ...f,
         assignments: fieldAsns,
@@ -62,7 +65,8 @@ export async function GET(req: NextRequest) {
     });
 
     const responseData = (fieldsRes.data || []).map((f) => {
-      const fieldAsns = (assignmentsRes.data || []).filter((a) => a.field_key === f.field_key);
+      // Scoped to the 'light' bucket — see the matching comment in the db.json fallback above.
+      const fieldAsns = (assignmentsRes.data || []).filter((a) => a.field_key === f.field_key && (a.complexity ?? "light") === "light");
       return {
         ...f,
         assignments: fieldAsns,

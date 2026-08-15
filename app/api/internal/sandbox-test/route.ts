@@ -5,6 +5,7 @@ import { attemptCall } from "@/app/api/v1/chat/completions/route";
 import { decryptKey } from "@/lib/crypto";
 import { parseUploadedFile, type ParsedFileResult } from "@/lib/file-parser";
 import { classifyComplexity } from "@/lib/classify-complexity";
+import { DEFAULT_MODEL_BY_PROVIDER } from "@/lib/provider-adapters";
 import fs from "fs";
 import path from "path";
 
@@ -113,8 +114,15 @@ export async function POST(req: NextRequest) {
       try {
         if (fs.existsSync(dbJsonPath)) {
           const db = JSON.parse(fs.readFileSync(dbJsonPath, "utf8"));
-          assignments = (db.fieldPoolAssignments || [])
-            .filter((a: any) => a.field_key === fieldKey)
+          // Same complexity-scoping (with 'light' fallback) as the Supabase path above.
+          const all = db.fieldPoolAssignments || [];
+          const forComplexity = all.filter(
+            (a: any) => a.field_key === fieldKey && (a.complexity ?? "light") === complexity
+          );
+          const forLight = complexity === "light"
+            ? forComplexity
+            : all.filter((a: any) => a.field_key === fieldKey && (a.complexity ?? "light") === "light");
+          assignments = (forComplexity.length > 0 ? forComplexity : forLight)
             .map((a: any) => ({ provider: a.provider, pool_tier: a.pool_tier }))
             .sort((a: any, b: any) => a.pool_tier - b.pool_tier);
         }
@@ -198,7 +206,7 @@ ${prompt}`;
         try {
           const { data } = await supabaseAdmin!
             .from("gw_provider_keys")
-            .select("id, provider, key_encrypted, usage_count, last_used_at, label, priority, cooldown_until, consecutive_429_count")
+            .select("id, provider, key_encrypted, usage_count, last_used_at, label, priority, cooldown_until, consecutive_429_count, model_name")
             .in("provider", providersInTier)
             .eq("status", "active");
           if (data) dbKeys = data;
@@ -212,11 +220,17 @@ ${prompt}`;
         const candidates: any[] = [];
         for (const p of providersInTier) {
           let envFallbackKey = "";
+          let envFallbackModel: string | undefined;
           if (p === "gemini") envFallbackKey = process.env.GEMINI_API_KEY1 || process.env.GEMINI_API_KEY || "";
           else if (p === "gpt") envFallbackKey = process.env.OPENAI_API_KEY1 || process.env.OPENAI_API_KEY || "";
           else if (p === "claude") envFallbackKey = process.env.CLAUDE_API_KEY1 || process.env.CLAUDE_API_KEY || "";
           else if (p === "grok") envFallbackKey = process.env.GROK_API_KEY1 || process.env.GROK_API_KEY || "";
           else if (p === "deepseek") envFallbackKey = process.env.DEEPSEEK_API_KEY1 || process.env.DEEPSEEK_API_KEY || "";
+          else if (p === "deepseek_reasoning" || p === "deepseek_top") {
+            // Same DeepSeek account/key as 'deepseek' — only the model differs.
+            envFallbackKey = process.env.DEEPSEEK_API_KEY1 || process.env.DEEPSEEK_API_KEY || "";
+            envFallbackModel = DEFAULT_MODEL_BY_PROVIDER[p];
+          }
 
           if (envFallbackKey && !envFallbackKey.includes("placeholder")) {
             candidates.push({
@@ -227,7 +241,8 @@ ${prompt}`;
               usageCount: 0,
               priority: 0,
               lastUsedAt: null,
-              consecutive429Count: 0
+              consecutive429Count: 0,
+              model_name: envFallbackModel
             });
           }
         }
@@ -239,7 +254,7 @@ ${prompt}`;
           providerUsed = candidate.provider;
           const providerApiKey = candidate.key;
 
-          const resCall = await attemptCall(candidate.provider, providerApiKey, finalPrompt, systemPrompt, body, selectedKeyId, selectedKeyLabel, parsedFile);
+          const resCall = await attemptCall(candidate.provider, providerApiKey, finalPrompt, systemPrompt, body, selectedKeyId, selectedKeyLabel, parsedFile, undefined, candidate.model_name);
           if (resCall.success) {
             aiResponseText = resCall.aiResponseText;
             promptTokens = resCall.promptTokens;
@@ -275,7 +290,8 @@ ${prompt}`;
               usageCount: k.usage_count,
               priority: k.priority || 0,
               lastUsedAt: k.last_used_at,
-              consecutive429Count: k.consecutive_429_count ?? 0
+              consecutive429Count: k.consecutive_429_count ?? 0,
+              model_name: k.model_name
             });
           }
         } catch (err) {
@@ -302,7 +318,7 @@ ${prompt}`;
         providerUsed = candidate.provider;
         const providerApiKey = candidate.key;
 
-        const resCall = await attemptCall(candidate.provider, providerApiKey, finalPrompt, systemPrompt, body, selectedKeyId, selectedKeyLabel, parsedFile);
+        const resCall = await attemptCall(candidate.provider, providerApiKey, finalPrompt, systemPrompt, body, selectedKeyId, selectedKeyLabel, parsedFile, undefined, candidate.model_name);
         if (resCall.success) {
           aiResponseText = resCall.aiResponseText;
           promptTokens = resCall.promptTokens;

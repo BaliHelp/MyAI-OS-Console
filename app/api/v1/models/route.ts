@@ -19,6 +19,16 @@ const PROVIDER_DISPLAY_NAME: Record<string, string> = {
   deepseek: "DeepSeek",
 };
 
+// deepseek_reasoning/deepseek_top are internal routing entries (see
+// lib/provider-adapters/index.ts) that exist purely so complexity-based reasoning tiering's
+// key-candidate pooling never mixes them with the plain 'deepseek' light-tier key — not a
+// distinction this public, unauthenticated endpoint should expose. Normalized back to
+// 'deepseek' here so they report/dedupe as the same provider a caller already sees.
+const PUBLIC_PROVIDER_NAME: Record<string, string> = {
+  deepseek_reasoning: "deepseek",
+  deepseek_top: "deepseek",
+};
+
 export async function GET() {
   if (!supabaseAdmin) {
     return NextResponse.json({ error: "Database not configured" }, { status: 503 });
@@ -40,18 +50,19 @@ export async function GET() {
     const model = row.model_name || DEFAULT_MODEL_BY_PROVIDER[row.provider] || null;
     if (!model) continue; // no configured model and no known default (e.g. an unrecognized provider) — skip rather than report a null model
 
-    const dedupeKey = `${row.provider}::${model}`;
+    const publicProvider = PUBLIC_PROVIDER_NAME[row.provider] || row.provider;
+    const dedupeKey = `${publicProvider}::${model}`;
     if (seen.has(dedupeKey)) continue;
     seen.add(dedupeKey);
 
     // "others"/"custom_openai" keys aren't one consistent product — use the key's own label
     // (e.g. "Moonshot Kimi", "OpenROUTER") rather than a generic "Others" name.
     const name =
-      PROVIDER_DISPLAY_NAME[row.provider] ||
+      PROVIDER_DISPLAY_NAME[publicProvider] ||
       row.label ||
-      row.provider;
+      publicProvider;
 
-    models.push({ name, provider: row.provider, model });
+    models.push({ name, provider: publicProvider, model });
   }
 
   return NextResponse.json(models, {
