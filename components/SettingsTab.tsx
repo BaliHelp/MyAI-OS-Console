@@ -15,6 +15,8 @@ const DEFAULT_MODEL_BY_PROVIDER: Record<string, string> = {
   claude: "claude-sonnet-4-5",
   grok: "grok-2",
   deepseek: "deepseek-chat",
+  deepseek_reasoning: "deepseek-reasoner",
+  deepseek_top: "deepseek-reasoner",
 };
 
 interface SettingsTabProps {
@@ -514,6 +516,8 @@ export default function SettingsTab({ lang, setLang, theme, setTheme, adminEmail
                       <option value="gpt">OpenAI GPT (Reasoning & Chat Widget)</option>
                       <option value="grok">x.ai Grok (Technical Team: Grok-4.5 & Imagine)</option>
                       <option value="deepseek">Deepseek AI (Reasoning & Chat)</option>
+                      <option value="deepseek_reasoning">Deepseek Reasoner — Bucket &quot;reasoning&quot;</option>
+                      <option value="deepseek_top">Deepseek Reasoner — Bucket &quot;top&quot;</option>
                       <option value="others">Others (GLM, Llama, DLL - Tier 2)</option>
                     </select>
                   </div>
@@ -625,7 +629,7 @@ export default function SettingsTab({ lang, setLang, theme, setTheme, adminEmail
                                 ? 'bg-amber-500/10 text-amber-400'
                                 : k.provider === 'gpt'
                                   ? 'bg-emerald-500/10 text-emerald-400'
-                                  : k.provider === 'deepseek'
+                                  : k.provider === 'deepseek' || k.provider === 'deepseek_reasoning' || k.provider === 'deepseek_top'
                                     ? 'bg-sky-500/10 text-sky-400'
                                     : 'bg-indigo-500/10 text-indigo-400'
                           }`}>
