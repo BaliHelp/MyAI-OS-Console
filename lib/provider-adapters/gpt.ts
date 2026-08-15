@@ -1,5 +1,6 @@
 import type { ProviderAdapter, FileData } from "./types";
 import { supabaseAdmin } from "@/lib/supabase";
+import { parseOpenAiSse } from "./sse-utils";
 
 async function autoDisableKey(selectedKeyId: string | null | undefined, selectedKeyLabel: string) {
   if (selectedKeyId && supabaseAdmin) {
@@ -78,6 +79,9 @@ export const gptAdapter: ProviderAdapter = {
           ],
           temperature: options.temperature ?? 0.7,
           max_tokens: options.max_tokens ?? 2000,
+          // Never combined with tools by the gateway (route.ts falls back to buffered JSON when
+          // both are requested), so this branch is the only place `stream` needs handling.
+          ...(options.stream ? { stream: true, stream_options: { include_usage: true } } : {}),
         };
       }
 
@@ -90,8 +94,10 @@ export const gptAdapter: ProviderAdapter = {
         body: JSON.stringify(requestBody),
       });
 
-      const resJson = await res.json().catch(() => ({}));
       if (!res.ok) {
+        // Streaming or not, OpenAI returns a single JSON error object on failure — never an
+        // SSE body — so this parse is safe regardless of which branch built the request.
+        const resJson = await res.json().catch(() => ({}));
         const errorMsg = resJson.error?.message || "OpenAI API error";
         console.warn(`[gateway] GPT key failed: ${selectedKeyLabel}. Status: ${res.status}. Error: ${errorMsg}`);
         if (res.status === 400) return { success: false, aiResponseText: "", promptTokens: 0, completionTokens: 0, errorMsg, status: 400 };
@@ -99,6 +105,19 @@ export const gptAdapter: ProviderAdapter = {
         return { success: false, aiResponseText: "", promptTokens: 0, completionTokens: 0, errorMsg, status: res.status };
       }
 
+      if (options.stream && !hasTools && res.body) {
+        return {
+          success: true,
+          aiResponseText: "",
+          promptTokens: 0,
+          completionTokens: 0,
+          errorMsg: "",
+          status: 200,
+          streamChunks: parseOpenAiSse(res.body),
+        };
+      }
+
+      const resJson = await res.json();
       const aiResponseText = resJson.choices?.[0]?.message?.content || "";
       const toolCalls = resJson.choices?.[0]?.message?.tool_calls;
       const promptTokens = resJson.usage?.prompt_tokens || 0;

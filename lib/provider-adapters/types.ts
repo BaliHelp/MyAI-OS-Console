@@ -23,6 +23,15 @@ export interface ToolCall {
   function: { name: string; arguments: string };
 }
 
+/** One normalized increment of a streamed response. */
+export interface StreamChunk {
+  /** Incremental text produced this chunk. Omitted on the final chunk if there's no trailing text. */
+  delta?: string;
+  /** Present only on the final chunk, once the provider has reported final usage. */
+  promptTokens?: number;
+  completionTokens?: number;
+}
+
 export interface AttemptCallResult {
   success: boolean;
   aiResponseText: string;
@@ -32,6 +41,16 @@ export interface AttemptCallResult {
   status: number;
   /** Present when the model chose to call a tool instead of (or alongside) answering in text. */
   toolCalls?: ToolCall[];
+  /**
+   * Present when `options.stream` was true and the call succeeded (status 200) — an async
+   * generator of normalized delta chunks the caller can consume to relay real streaming output
+   * to its own client. When present, aiResponseText/promptTokens/completionTokens are NOT yet
+   * populated (still "" / 0); the caller must fully consume the generator and accumulate them
+   * itself. Adapters without real incremental streaming support may still set this by wrapping
+   * their normal buffered result in a single-chunk generator — callers should never need to know
+   * which case they're in.
+   */
+  streamChunks?: AsyncGenerator<StreamChunk>;
 }
 
 export interface ProviderAdapter {
@@ -58,6 +77,13 @@ export interface ProviderAdapter {
        * single `prompt` string. Ignored unless `tools` is also set.
        */
       messages?: Array<Record<string, unknown>>;
+      /**
+       * When true, the caller wants incremental output — the adapter should populate
+       * AttemptCallResult.streamChunks instead of (or in addition to, immaterially) the buffered
+       * aiResponseText. Never combined with `tools` by the gateway (route.ts falls back to
+       * buffered JSON when both are requested), so adapters don't need to handle that case.
+       */
+      stream?: boolean;
     },
     fileData?: FileData | null,
     selectedKeyId?: string | null,
