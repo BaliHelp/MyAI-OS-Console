@@ -12,7 +12,7 @@ import { geminiAdapter, GEMINI_PRIMARY_MODEL } from "./gemini";
 import { gptAdapter, GPT_DEFAULT_MODEL } from "./gpt";
 import { claudeAdapter, CLAUDE_DEFAULT_MODEL } from "./claude";
 import { grokAdapter, GROK_DEFAULT_MODEL } from "./grok";
-import { deepseekAdapter, DEEPSEEK_DEFAULT_MODEL } from "./deepseek";
+import { deepseekAdapter, DEEPSEEK_DEFAULT_MODEL, DEEPSEEK_REASONER_MODEL } from "./deepseek";
 import { customOpenaiAdapter } from "./custom-openai-compatible";
 
 export const PROVIDER_REGISTRY: Record<string, ProviderAdapter> = {
@@ -21,6 +21,14 @@ export const PROVIDER_REGISTRY: Record<string, ProviderAdapter> = {
   claude: claudeAdapter,
   grok: grokAdapter,
   deepseek: deepseekAdapter,
+  // Same adapter as `deepseek` — only the model_name differs (set per gw_provider_keys row).
+  // Kept as distinct registry/provider names (not just a model_name override on the plain
+  // `deepseek` provider) so complexity-based reasoning tiering's key-candidate pooling, which
+  // groups strictly by provider string, never mixes these into the light-tier `deepseek` pool.
+  // See lib/classify-complexity.ts and the pool assignment logic in
+  // app/api/v1/chat/completions/route.ts.
+  deepseek_reasoning: deepseekAdapter,
+  deepseek_top: deepseekAdapter,
   others: customOpenaiAdapter,
   custom_openai: customOpenaiAdapter,
 };
@@ -37,6 +45,8 @@ export const DEFAULT_MODEL_BY_PROVIDER: Record<string, string> = {
   claude: CLAUDE_DEFAULT_MODEL,
   grok: GROK_DEFAULT_MODEL,
   deepseek: DEEPSEEK_DEFAULT_MODEL,
+  deepseek_reasoning: DEEPSEEK_REASONER_MODEL,
+  deepseek_top: DEEPSEEK_REASONER_MODEL,
 };
 
 /**

@@ -3,6 +3,7 @@ import { supabaseAdmin } from "@/lib/supabase";
 import { decryptKey, hashApiKey } from "@/lib/crypto";
 import { parseUploadedFile, type ParsedFileResult } from "@/lib/file-parser";
 import { saveToDataCenter } from "@/lib/data-center";
+import { classifyComplexity } from "@/lib/classify-complexity";
 import fs from "fs";
 import path from "path";
 
@@ -189,6 +190,13 @@ export async function POST(req: NextRequest) {
     }
     const fieldKey = body.field;
 
+    // Complexity-based reasoning tiering: classified once, server-side, purely from the
+    // resolved prompt's length (lib/classify-complexity.ts) — no client-side hint needed.
+    // A field only sees different routing if it has been given dedicated 'reasoning'/'top'
+    // gw_field_pool_assignments rows; every other field only ever has 'light' rows, so the
+    // fallback query below always resolves to their one existing bucket unchanged.
+    const complexity = classifyComplexity(prompt);
+
     // ── 3b. Fetch Pool Assignments for the Field ──────────────────────────
     let assignments: any[] = [];
     let isDbAssigned = false;
@@ -198,11 +206,27 @@ export async function POST(req: NextRequest) {
         .from("gw_field_pool_assignments")
         .select("provider, pool_tier")
         .eq("field_key", fieldKey)
+        .eq("complexity", complexity)
         .order("pool_tier", { ascending: true });
 
       if (!assignError && data && data.length > 0) {
         assignments = data;
         isDbAssigned = true;
+      } else if (complexity !== "light") {
+        // No dedicated bucket for this field at this complexity — fall back to the
+        // always-present 'light' bucket. This is the no-op path for every field except
+        // ones explicitly given reasoning/top rows.
+        const { data: lightData, error: lightErr } = await supabaseAdmin
+          .from("gw_field_pool_assignments")
+          .select("provider, pool_tier")
+          .eq("field_key", fieldKey)
+          .eq("complexity", "light")
+          .order("pool_tier", { ascending: true });
+
+        if (!lightErr && lightData && lightData.length > 0) {
+          assignments = lightData;
+          isDbAssigned = true;
+        }
       }
     } catch (e) {
       // Ignore DB error, fall back to db.json
@@ -685,6 +709,10 @@ ${liveDiagnosticSummary}
         selectedUsageCount = candidate.usageCount;
         providerUsed = candidate.provider;
         const providerApiKey = candidate.key;
+
+        console.log(
+          `[gateway] complexity=${complexity} tier=${tier} provider=${candidate.provider} model=${candidate.model_name || "(adapter default)"}`
+        );
 
         const resCall = await attemptCall(
           candidate.provider,

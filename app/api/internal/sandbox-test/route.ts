@@ -4,6 +4,7 @@ import { getSession } from "@/lib/auth";
 import { attemptCall } from "@/app/api/v1/chat/completions/route";
 import { decryptKey } from "@/lib/crypto";
 import { parseUploadedFile, type ParsedFileResult } from "@/lib/file-parser";
+import { classifyComplexity } from "@/lib/classify-complexity";
 import fs from "fs";
 import path from "path";
 
@@ -76,7 +77,10 @@ export async function POST(req: NextRequest) {
 
     const systemPrompt = resolvedSystemPrompt;
 
-    // 4. Retrieve routing assignments
+    // 4. Retrieve routing assignments — complexity-scoped the same way the real gateway
+    // route is, so testing a field with dedicated reasoning/top buckets from the Sandbox
+    // tab doesn't misgroup all three buckets into one flat tier list.
+    const complexity = classifyComplexity(prompt);
     let assignments: any[] = [];
     if (isSupabaseReady) {
       try {
@@ -84,10 +88,21 @@ export async function POST(req: NextRequest) {
           .from("gw_field_pool_assignments")
           .select("provider, pool_tier")
           .eq("field_key", fieldKey)
+          .eq("complexity", complexity)
           .order("pool_tier", { ascending: true });
-        
+
         if (dbAsns && dbAsns.length > 0) {
           assignments = dbAsns;
+        } else if (complexity !== "light") {
+          const { data: lightAsns } = await supabaseAdmin!
+            .from("gw_field_pool_assignments")
+            .select("provider, pool_tier")
+            .eq("field_key", fieldKey)
+            .eq("complexity", "light")
+            .order("pool_tier", { ascending: true });
+          if (lightAsns && lightAsns.length > 0) {
+            assignments = lightAsns;
+          }
         }
       } catch (err) {
         console.warn("[sandbox] Database error fetching pool assignments, falling back:", err);
