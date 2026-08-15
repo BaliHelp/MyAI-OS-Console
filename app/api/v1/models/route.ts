@@ -1,15 +1,18 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { DEFAULT_MODEL_BY_PROVIDER } from "@/lib/provider-adapters";
+import { COMPLEXITY_THRESHOLDS } from "@/lib/classify-complexity";
 
 // Deliberately public (see PUBLIC_PATHS in proxy.ts) — meant for any client site using the
-// Gateway to check which AI/provider/model combination is currently live, without needing a
-// gateway API key or opening the console dashboard. Live DB read every request, so it's
-// inherently always current; no cron/cache layer needed at this scale.
+// Gateway to check which AI/provider/model combination is currently live, and how our
+// complexity-based reasoning tiering routes their requests, without needing a gateway API key
+// or opening the console dashboard. Live DB read every request (both `models` and `tiers`), so
+// it's inherently always current — adding a provider key or reordering a field's routing in the
+// dashboard shows up here on the very next request, no cron/cache layer needed at this scale.
 //
-// Intentionally minimal: name, provider, model only — no usage counts, no cost data, no key
-// labels or IDs. Nothing here should let a caller infer how many keys exist per provider or
-// any other internal capacity detail.
+// `models`/`tiers` intentionally omit usage counts, cost data, and key labels/IDs — nothing
+// here should let a caller infer how many keys exist per provider, only which
+// provider/model they'll actually get and in what order.
 
 const PROVIDER_DISPLAY_NAME: Record<string, string> = {
   gemini: "Gemini",
@@ -17,55 +20,138 @@ const PROVIDER_DISPLAY_NAME: Record<string, string> = {
   claude: "Claude",
   grok: "Grok",
   deepseek: "DeepSeek",
+  // deepseek_reasoning/deepseek_top are internal routing entries (see
+  // lib/provider-adapters/index.ts) that exist purely so complexity-based reasoning tiering's
+  // key-candidate pooling never mixes them with the plain 'deepseek' light-tier key — display
+  // name-wise they're still just "DeepSeek" to a caller (the surrounding bucket/tier position
+  // already communicates which one it is).
+  deepseek_reasoning: "DeepSeek",
+  deepseek_top: "DeepSeek",
 };
 
-// deepseek_reasoning/deepseek_top are internal routing entries (see
-// lib/provider-adapters/index.ts) that exist purely so complexity-based reasoning tiering's
-// key-candidate pooling never mixes them with the plain 'deepseek' light-tier key — not a
-// distinction this public, unauthenticated endpoint should expose. Normalized back to
-// 'deepseek' here so they report/dedupe as the same provider a caller already sees.
+// Used only for the top-level `models` summary — collapses deepseek_reasoning/deepseek_top back
+// to 'deepseek' so that flat list dedupes to "DeepSeek offers these N models" instead of
+// listing the same model 3x under 3 internal provider names. The `tiers` section below keeps
+// them distinct on purpose, since that's exactly the routing detail it exists to show.
 const PUBLIC_PROVIDER_NAME: Record<string, string> = {
   deepseek_reasoning: "deepseek",
   deepseek_top: "deepseek",
 };
+
+const TIER_UPDATE_NOTICE =
+  "Struktur tier & model bisa berubah sewaktu-waktu (siklus review internal setiap 12 jam). " +
+  "Aplikasi yang memakai Gateway ini wajib fetch ulang endpoint ini minimal 2x sehari — jam 06:00 " +
+  "dan 18:00 WIB — supaya routing di sisi Anda tidak stale dibanding konfigurasi live kami. " +
+  "Data di response ini selalu real-time per request (bukan snapshot dari jadwal itu); jadwal " +
+  "06:00/18:00 hanya rekomendasi cadence polling minimum di sisi Anda.";
 
 export async function GET() {
   if (!supabaseAdmin) {
     return NextResponse.json({ error: "Database not configured" }, { status: 503 });
   }
 
-  const { data, error } = await supabaseAdmin
-    .from("gw_provider_keys")
-    .select("provider, label, model_name")
-    .eq("status", "active");
+  const [keysRes, assignmentsRes] = await Promise.all([
+    supabaseAdmin.from("gw_provider_keys").select("provider, label, model_name").eq("status", "active"),
+    supabaseAdmin.from("gw_field_pool_assignments").select("field_key, provider, pool_tier, complexity"),
+  ]);
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  if (keysRes.error) {
+    return NextResponse.json({ error: keysRes.error.message }, { status: 500 });
   }
 
+  const keyRows = keysRes.data || [];
+
+  // Resolve every active key to its real model once, keyed by the RAW (non-normalized) provider
+  // name — the `tiers` section needs deepseek_reasoning/deepseek_top kept distinct, and a
+  // provider like 'others' can legitimately resolve to several different models (Kimi,
+  // OpenRouter, ...), so each provider maps to a small deduped list of {name, model} candidates
+  // rather than a single value.
+  const candidatesByProvider = new Map<string, Array<{ name: string; model: string }>>();
+  for (const row of keyRows) {
+    const model = row.model_name || DEFAULT_MODEL_BY_PROVIDER[row.provider] || null;
+    if (!model) continue; // no configured model and no known default — skip rather than report null
+
+    const name =
+      PROVIDER_DISPLAY_NAME[row.provider] ||
+      row.label || // "others"/"custom_openai" keys aren't one consistent product — use the key's own label
+      row.provider;
+
+    const list = candidatesByProvider.get(row.provider) || [];
+    if (!list.some((c) => c.name === name && c.model === model)) {
+      list.push({ name, model });
+    }
+    candidatesByProvider.set(row.provider, list);
+  }
+
+  // ── Top-level flat summary: "what's live" ──────────────────────────────
   const seen = new Set<string>();
   const models: Array<{ name: string; provider: string; model: string }> = [];
-
-  for (const row of data || []) {
-    const model = row.model_name || DEFAULT_MODEL_BY_PROVIDER[row.provider] || null;
-    if (!model) continue; // no configured model and no known default (e.g. an unrecognized provider) — skip rather than report a null model
-
-    const publicProvider = PUBLIC_PROVIDER_NAME[row.provider] || row.provider;
-    const dedupeKey = `${publicProvider}::${model}`;
-    if (seen.has(dedupeKey)) continue;
-    seen.add(dedupeKey);
-
-    // "others"/"custom_openai" keys aren't one consistent product — use the key's own label
-    // (e.g. "Moonshot Kimi", "OpenROUTER") rather than a generic "Others" name.
-    const name =
-      PROVIDER_DISPLAY_NAME[publicProvider] ||
-      row.label ||
-      publicProvider;
-
-    models.push({ name, provider: publicProvider, model });
+  for (const [provider, candidates] of candidatesByProvider) {
+    const publicProvider = PUBLIC_PROVIDER_NAME[provider] || provider;
+    for (const c of candidates) {
+      const dedupeKey = `${publicProvider}::${c.model}`;
+      if (seen.has(dedupeKey)) continue;
+      seen.add(dedupeKey);
+      models.push({ name: c.name, provider: publicProvider, model: c.model });
+    }
   }
 
-  return NextResponse.json(models, {
-    headers: { "Cache-Control": "public, max-age=300" },
-  });
+  // ── Per-field tier structure: "how a request gets routed" ─────────────
+  // gw_field_pool_assignments has one row per (field, provider, complexity bucket), tried in
+  // pool_tier order within a bucket — multiple providers can share a pool_tier (tried by key
+  // priority; see the DeepSeek-first reorder migration), so this groups rows into
+  // field -> complexity -> tier -> candidate list, resolving each provider to its live model(s)
+  // exactly like the flat list above. A tier with no currently-active key resolves to an empty
+  // candidates array rather than being silently dropped, so a caller can tell "this tier exists
+  // but has nothing live right now" apart from "this tier doesn't exist."
+  const tiers: Record<string, Record<string, Array<{ tier: number; candidates: Array<{ name: string; model: string }> }>>> = {};
+
+  if (!assignmentsRes.error) {
+    type Row = { field_key: string; provider: string; pool_tier: number; complexity: string };
+    const byField = new Map<string, Map<string, Map<number, Row[]>>>();
+
+    for (const row of (assignmentsRes.data || []) as Row[]) {
+      const byComplexity = byField.get(row.field_key) || new Map<string, Map<number, Row[]>>();
+      const byTier = byComplexity.get(row.complexity) || new Map<number, Row[]>();
+      const list = byTier.get(row.pool_tier) || [];
+      list.push(row);
+      byTier.set(row.pool_tier, list);
+      byComplexity.set(row.complexity, byTier);
+      byField.set(row.field_key, byComplexity);
+    }
+
+    for (const [fieldKey, byComplexity] of byField) {
+      tiers[fieldKey] = {};
+      for (const [complexity, byTier] of byComplexity) {
+        const sortedTiers = Array.from(byTier.keys()).sort((a, b) => a - b);
+        tiers[fieldKey][complexity] = sortedTiers.map((tierNum) => {
+          const rows = byTier.get(tierNum)!;
+          const candidates: Array<{ name: string; model: string }> = [];
+          for (const row of rows) {
+            for (const c of candidatesByProvider.get(row.provider) || []) {
+              if (!candidates.some((x) => x.name === c.name && x.model === c.model)) {
+                candidates.push(c);
+              }
+            }
+          }
+          return { tier: tierNum, candidates };
+        });
+      }
+    }
+  }
+
+  return NextResponse.json(
+    {
+      generated_at: new Date().toISOString(),
+      tier_update_notice: TIER_UPDATE_NOTICE,
+      complexity_classification: {
+        light: `prompt length <= ${COMPLEXITY_THRESHOLDS.light} characters`,
+        reasoning: `${COMPLEXITY_THRESHOLDS.light} < prompt length <= ${COMPLEXITY_THRESHOLDS.reasoning} characters`,
+        top: `prompt length > ${COMPLEXITY_THRESHOLDS.reasoning} characters`,
+      },
+      models,
+      tiers,
+    },
+    { headers: { "Cache-Control": "public, max-age=300" } }
+  );
 }
