@@ -10,8 +10,13 @@ import { singleChunkStream } from "./sse-utils";
 
 // ── Gemini model cascade ─────────────────────────────────────────────────────
 // Primary model is tried first; if it returns non-200, fallback is used.
-const PRIMARY_MODEL   = "gemini-2.5-flash-lite";
-const FALLBACK_MODEL  = "gemini-2.5-flash";
+// The previous pair (gemini-2.5-flash-lite / gemini-2.5-flash) now 404s with
+// "no longer available to new users" for every key in this pool — confirmed live
+// against Google's API, not a regional/quota issue. gemini-flash-lite-latest is a
+// Google-maintained alias that tracks whatever the current recommended lite model
+// is, so the fallback shouldn't go stale the same way again.
+const PRIMARY_MODEL   = "gemini-3.5-flash-lite";
+const FALLBACK_MODEL  = "gemini-flash-lite-latest";
 
 async function callGeminiApi(
   apiKey: string,
