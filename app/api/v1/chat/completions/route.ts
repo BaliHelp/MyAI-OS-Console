@@ -949,6 +949,12 @@ ${liveDiagnosticSummary}
         provider_used: providerUsed,
         processed_at: new Date().toISOString(),
         result: result,
+        // Token accounting — surfaced on every response (buffered and the streaming `done`
+        // event alike) so callers can do their own billing/usage tracking without needing a
+        // separate call. Previously only written internally to gw_usage_logs, never returned.
+        prompt_tokens: finalPromptTokens,
+        completion_tokens: finalCompletionTokens,
+        total_tokens: finalPromptTokens + finalCompletionTokens,
         // OpenAI-compatible: same shape as choices[0].message.tool_calls. Present only when the
         // model chose to call a tool for this turn — the caller executes it and sends the result
         // back as a new role:"tool" message to continue the conversation.
