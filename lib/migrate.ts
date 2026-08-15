@@ -63,10 +63,16 @@ export async function importEnvProviderKeys(): Promise<void> {
 
     if (!decrypted) continue;
 
-    // Check if this decrypted value matches any of our current env values
-    const matchedEnv = envKeyValues.find(item => item.value === decrypted);
+    // Check if this decrypted value matches any of our current env values FOR THIS ROW'S
+    // OWN PROVIDER. Matching on value alone would treat e.g. deepseek_reasoning/deepseek_top
+    // rows (which intentionally reuse the plain 'deepseek' key's secret — DeepSeek uses one
+    // API key across its whole model lineup) as duplicates of the 'deepseek' row and delete
+    // them. Scoping the match to (provider, value) lets the same underlying secret legitimately
+    // back multiple provider entries without this reconciliation collapsing them into one.
+    const dedupeKey = `${dbKey.provider}::${decrypted}`;
+    const matchedEnv = envKeyValues.find(item => item.value === decrypted && item.provider === dbKey.provider);
     if (matchedEnv) {
-      if (envValuesProcessed.has(decrypted)) {
+      if (envValuesProcessed.has(dedupeKey)) {
         // This is a duplicate key in the DB! Delete it.
         console.log(`[migrate] Deleting duplicate key in DB: ${dbKey.label} (${dbKey.id})`);
         await supabaseAdmin.from("gw_provider_keys").delete().eq("id", dbKey.id);
@@ -76,14 +82,14 @@ export async function importEnvProviderKeys(): Promise<void> {
           console.log(`[migrate] Updating label/provider/priority for key in DB: ${dbKey.label} -> ${matchedEnv.label}`);
           await supabaseAdmin
             .from("gw_provider_keys")
-            .update({ 
-              label: matchedEnv.label, 
+            .update({
+              label: matchedEnv.label,
               provider: matchedEnv.provider,
               priority: matchedEnv.priority
             })
             .eq("id", dbKey.id);
         }
-        envValuesProcessed.add(decrypted);
+        envValuesProcessed.add(dedupeKey);
       }
     } else {
       // It is not in the current env.
@@ -105,7 +111,8 @@ export async function importEnvProviderKeys(): Promise<void> {
 
   // 4. For any current env values that were not matched in the DB, insert them!
   for (const envKey of envKeyValues) {
-    if (!envValuesProcessed.has(envKey.value)) {
+    const dedupeKey = `${envKey.provider}::${envKey.value}`;
+    if (!envValuesProcessed.has(dedupeKey)) {
       console.log(`[migrate] Inserting new key from env: ${envKey.label}`);
       const encrypted = encryptKey(envKey.value);
       await supabaseAdmin.from("gw_provider_keys").insert({
@@ -115,7 +122,7 @@ export async function importEnvProviderKeys(): Promise<void> {
         status: "active",
         priority: envKey.priority
       });
-      envValuesProcessed.add(envKey.value);
+      envValuesProcessed.add(dedupeKey);
     }
   }
 

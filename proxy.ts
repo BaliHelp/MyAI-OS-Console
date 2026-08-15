@@ -14,6 +14,7 @@ const PUBLIC_PATHS = [
   "/api/auth/logout",
   "/api/auth/forgot-password",
   "/api/v1/chat/completions",
+  "/api/v1/models",
   "/_next",
   "/favicon.ico"
 ];

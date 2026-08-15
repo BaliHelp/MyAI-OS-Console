@@ -34,7 +34,10 @@ export async function GET(req: NextRequest) {
     });
 
     const responseData = fields.map((f: any) => {
-      const fieldAsns = assignments.filter((a: any) => a.field_key === f.field_key);
+      // Scoped to the 'light' bucket — the dashboard's routing editor has no complexity-bucket
+      // switcher yet, so mixing in 'reasoning'/'top' rows here would collide on pool_tier (see
+      // handleSaveAssignments in RoutingTab.tsx, which only ever saves to 'light' too).
+      const fieldAsns = assignments.filter((a: any) => a.field_key === f.field_key && (a.complexity ?? "light") === "light");
       return {
         ...f,
         assignments: fieldAsns,
@@ -62,7 +65,8 @@ export async function GET(req: NextRequest) {
     });
 
     const responseData = (fieldsRes.data || []).map((f) => {
-      const fieldAsns = (assignmentsRes.data || []).filter((a) => a.field_key === f.field_key);
+      // Scoped to the 'light' bucket — see the matching comment in the db.json fallback above.
+      const fieldAsns = (assignmentsRes.data || []).filter((a) => a.field_key === f.field_key && (a.complexity ?? "light") === "light");
       return {
         ...f,
         assignments: fieldAsns,
@@ -110,19 +114,24 @@ export async function POST(req: NextRequest) {
     }
 
     if (action === "update_assignments") {
-      const { field_key, assignments } = body; // assignments is array of { provider, pool_tier }
+      const { field_key, assignments, complexity } = body; // assignments is array of { provider, pool_tier }
       if (!field_key || !Array.isArray(assignments)) {
         return NextResponse.json({ error: "field_key and assignments array are required" }, { status: 400 });
       }
-      // Remove old assignments
-      db.fieldPoolAssignments = db.fieldPoolAssignments.filter((a: any) => a.field_key !== field_key);
+      // Scoped to a single complexity bucket, same reasoning as the Supabase path below.
+      const bucket = complexity ?? "light";
+      // Remove old assignments for this bucket only
+      db.fieldPoolAssignments = db.fieldPoolAssignments.filter(
+        (a: any) => !(a.field_key === field_key && (a.complexity ?? "light") === bucket)
+      );
       // Insert new ones
       assignments.forEach((asn: any, i: number) => {
         db.fieldPoolAssignments.push({
           id: `a-${field_key}-${i}-${Math.random().toString(36).substring(2, 5)}`,
           field_key,
           provider: asn.provider,
-          pool_tier: asn.pool_tier
+          pool_tier: asn.pool_tier,
+          complexity: bucket
         });
       });
       writeLocalDb(db);
@@ -160,21 +169,29 @@ export async function POST(req: NextRequest) {
     }
 
     if (action === "update_assignments") {
-      const { field_key, assignments } = body; // assignments is array of { provider, pool_tier }
+      const { field_key, assignments, complexity } = body; // assignments is array of { provider, pool_tier }
       if (!field_key || !Array.isArray(assignments)) {
         return NextResponse.json({ error: "field_key and assignments array are required" }, { status: 400 });
       }
-      // Delete old assignments
+      // Scoped to a single complexity bucket ('light' unless the caller says otherwise) —
+      // NOT the whole field. A field can have separate 'light'/'reasoning'/'top' fallback
+      // chains (complexity-based reasoning tiering); an unscoped delete here would wipe the
+      // other buckets every time an admin edits routing for one of them from the dashboard.
+      const bucket = complexity ?? "light";
+
+      // Delete old assignments for this bucket only
       await supabaseAdmin
         .from("gw_field_pool_assignments")
         .delete()
-        .eq("field_key", field_key);
+        .eq("field_key", field_key)
+        .eq("complexity", bucket);
 
       if (assignments.length > 0) {
         const toInsert = assignments.map(a => ({
           field_key,
           provider: a.provider,
-          pool_tier: a.pool_tier
+          pool_tier: a.pool_tier,
+          complexity: bucket
         }));
         const { error: insErr } = await supabaseAdmin
           .from("gw_field_pool_assignments")

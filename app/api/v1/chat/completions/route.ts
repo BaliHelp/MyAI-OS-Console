@@ -3,6 +3,7 @@ import { supabaseAdmin } from "@/lib/supabase";
 import { decryptKey, hashApiKey } from "@/lib/crypto";
 import { parseUploadedFile, type ParsedFileResult } from "@/lib/file-parser";
 import { saveToDataCenter } from "@/lib/data-center";
+import { classifyComplexity } from "@/lib/classify-complexity";
 import fs from "fs";
 import path from "path";
 
@@ -189,6 +190,13 @@ export async function POST(req: NextRequest) {
     }
     const fieldKey = body.field;
 
+    // Complexity-based reasoning tiering: classified once, server-side, purely from the
+    // resolved prompt's length (lib/classify-complexity.ts) — no client-side hint needed.
+    // A field only sees different routing if it has been given dedicated 'reasoning'/'top'
+    // gw_field_pool_assignments rows; every other field only ever has 'light' rows, so the
+    // fallback query below always resolves to their one existing bucket unchanged.
+    const complexity = classifyComplexity(prompt);
+
     // ── 3b. Fetch Pool Assignments for the Field ──────────────────────────
     let assignments: any[] = [];
     let isDbAssigned = false;
@@ -198,11 +206,27 @@ export async function POST(req: NextRequest) {
         .from("gw_field_pool_assignments")
         .select("provider, pool_tier")
         .eq("field_key", fieldKey)
+        .eq("complexity", complexity)
         .order("pool_tier", { ascending: true });
 
       if (!assignError && data && data.length > 0) {
         assignments = data;
         isDbAssigned = true;
+      } else if (complexity !== "light") {
+        // No dedicated bucket for this field at this complexity — fall back to the
+        // always-present 'light' bucket. This is the no-op path for every field except
+        // ones explicitly given reasoning/top rows.
+        const { data: lightData, error: lightErr } = await supabaseAdmin
+          .from("gw_field_pool_assignments")
+          .select("provider, pool_tier")
+          .eq("field_key", fieldKey)
+          .eq("complexity", "light")
+          .order("pool_tier", { ascending: true });
+
+        if (!lightErr && lightData && lightData.length > 0) {
+          assignments = lightData;
+          isDbAssigned = true;
+        }
       }
     } catch (e) {
       // Ignore DB error, fall back to db.json
@@ -213,8 +237,20 @@ export async function POST(req: NextRequest) {
       if (fs.existsSync(dbPath)) {
         const db = JSON.parse(fs.readFileSync(dbPath, "utf8"));
         if (db.fieldPoolAssignments) {
-          assignments = db.fieldPoolAssignments
-            .filter((a: any) => a.field_key === fieldKey)
+          // Same complexity-scoping (with 'light' fallback) as the Supabase path above —
+          // rows without a complexity tag are treated as 'light', matching the DB column's
+          // DEFAULT. Without this, a field with dedicated reasoning/top rows would have every
+          // bucket merged into one tier list here.
+          const forComplexity = db.fieldPoolAssignments.filter(
+            (a: any) => a.field_key === fieldKey && (a.complexity ?? "light") === complexity
+          );
+          const forLight = complexity === "light"
+            ? forComplexity
+            : db.fieldPoolAssignments.filter(
+                (a: any) => a.field_key === fieldKey && (a.complexity ?? "light") === "light"
+              );
+
+          assignments = (forComplexity.length > 0 ? forComplexity : forLight)
             .map((a: any) => ({
               provider: a.provider,
               pool_tier: a.pool_tier
@@ -564,11 +600,20 @@ ${liveDiagnosticSummary}
         const candidates: any[] = [];
         for (const p of providersInTier) {
           let envFallbackKey = "";
+          let envFallbackModel: string | undefined;
           if (p === "gemini") envFallbackKey = process.env.GEMINI_API_KEY1 || process.env.GEMINI_API_KEY || "";
           else if (p === "gpt") envFallbackKey = process.env.OPENAI_API_KEY1 || process.env.OPENAI_API_KEY || "";
           else if (p === "claude") envFallbackKey = process.env.CLAUDE_API_KEY1 || process.env.CLAUDE_API_KEY || "";
           else if (p === "grok") envFallbackKey = process.env.GROK_API_KEY1 || process.env.GROK_API_KEY || "";
           else if (p === "deepseek") envFallbackKey = process.env.DEEPSEEK_API_KEY1 || process.env.DEEPSEEK_API_KEY || "";
+          else if (p === "deepseek_reasoning" || p === "deepseek_top") {
+            // Same DeepSeek account/key as 'deepseek' — only the model differs. Without this
+            // fallback, a missing/disabled gw_provider_keys row for these providers would
+            // silently drop tier 1 of the reasoning/top buckets instead of degrading to the
+            // reasoner model via the env key like every other provider does.
+            envFallbackKey = process.env.DEEPSEEK_API_KEY1 || process.env.DEEPSEEK_API_KEY || "";
+            envFallbackModel = DEFAULT_MODEL_BY_PROVIDER[p];
+          }
 
           if (envFallbackKey && !envFallbackKey.includes("placeholder")) {
             candidates.push({
@@ -579,7 +624,8 @@ ${liveDiagnosticSummary}
               usageCount: 0,
               priority: 0,
               lastUsedAt: null,
-              consecutive429Count: 0
+              consecutive429Count: 0,
+              model_name: envFallbackModel
             });
           }
         }
@@ -685,6 +731,10 @@ ${liveDiagnosticSummary}
         selectedUsageCount = candidate.usageCount;
         providerUsed = candidate.provider;
         const providerApiKey = candidate.key;
+
+        console.log(
+          `[gateway] complexity=${complexity} tier=${tier} provider=${candidate.provider} model=${candidate.model_name || "(adapter default)"}`
+        );
 
         const resCall = await attemptCall(
           candidate.provider,
@@ -1026,7 +1076,7 @@ ${liveDiagnosticSummary}
 // ── attemptCall Helper Function ──────────────────────────────────────────
 // Uses the central ProviderAdapter registry instead of hardcoded if/else chains.
 // To support a new provider, add its adapter to lib/provider-adapters/index.ts only.
-import { PROVIDER_REGISTRY } from "@/lib/provider-adapters";
+import { PROVIDER_REGISTRY, DEFAULT_MODEL_BY_PROVIDER } from "@/lib/provider-adapters";
 
 export async function attemptCall(
   provider: string,

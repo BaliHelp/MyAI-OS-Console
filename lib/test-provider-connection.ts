@@ -225,7 +225,12 @@ export async function testProviderConnection(
   if (provider === "gpt") return testGpt(rawKey, modelName);
   if (provider === "claude") return testClaude(rawKey, modelName);
   if (provider === "grok") return testGrok(rawKey, modelName);
-  if (provider === "deepseek") return testDeepseek(rawKey, modelName);
+  // deepseek_reasoning/deepseek_top are the same DeepSeek API as 'deepseek', routed through
+  // their own provider name only so tier pooling never mixes them with the plain light-tier
+  // key (see lib/provider-adapters/index.ts) — the connection test itself is identical.
+  if (provider === "deepseek" || provider === "deepseek_reasoning" || provider === "deepseek_top") {
+    return testDeepseek(rawKey, modelName);
+  }
 
   return { connected: false, details: `Unsupported provider: ${provider}` };
 }

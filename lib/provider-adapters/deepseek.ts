@@ -3,6 +3,7 @@ import { supabaseAdmin } from "@/lib/supabase";
 import { parseOpenAiSse } from "./sse-utils";
 
 export const DEEPSEEK_DEFAULT_MODEL = "deepseek-chat";
+export const DEEPSEEK_REASONER_MODEL = "deepseek-reasoner";
 
 async function autoDisableKey(selectedKeyId: string | null | undefined, selectedKeyLabel: string) {
   if (selectedKeyId && supabaseAdmin) {
