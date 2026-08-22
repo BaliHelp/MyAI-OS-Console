@@ -15,6 +15,9 @@ const PUBLIC_PATHS = [
   "/api/auth/forgot-password",
   "/api/v1/chat/completions",
   "/api/v1/models",
+  // Vercel Cron invokes these via GET with no session cookie — gated internally by
+  // Authorization: Bearer $CRON_SECRET instead (see app/api/cron/sync-knowledge/route.ts).
+  "/api/cron",
   "/_next",
   "/favicon.ico"
 ];
