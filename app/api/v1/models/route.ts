@@ -45,6 +45,18 @@ const TIER_UPDATE_NOTICE =
   "Data di response ini selalu real-time per request (bukan snapshot dari jadwal itu); jadwal " +
   "06:00/18:00 hanya rekomendasi cadence polling minimum di sisi Anda.";
 
+// Ecosystem also holds a Google API key restricted (by Google, at the project/API level) to
+// Cloud Text-to-Speech & Speech-to-Text only — it 403s on the Generative Language API on
+// purpose. It is NOT part of the `models`/`tiers` Gemini pool above and cannot serve
+// chat/reasoning/OCR fields; documented here so a caller doesn't assume "Gemini" here implies
+// TTS/STT is also reachable through this gateway.
+const TTS_STT_KEY_NOTICE =
+  "Ekosistem ini juga memiliki 1 API key Google terpisah yang dibatasi Google khusus untuk " +
+  "Cloud Text-to-Speech & Speech-to-Text saja — bukan untuk Gemini chat/reasoning/OCR umum. " +
+  "Key tersebut TIDAK termasuk dalam daftar 'models' atau 'tiers' provider Gemini di atas dan " +
+  "tidak bisa dipakai untuk field apa pun di Gateway ini. Jangan asumsikan kapasitas Gemini di " +
+  "atas mencakup TTS/STT.";
+
 export async function GET() {
   if (!supabaseAdmin) {
     return NextResponse.json({ error: "Database not configured" }, { status: 503 });
@@ -144,6 +156,7 @@ export async function GET() {
     {
       generated_at: new Date().toISOString(),
       tier_update_notice: TIER_UPDATE_NOTICE,
+      tts_stt_key_notice: TTS_STT_KEY_NOTICE,
       complexity_classification: {
         light: `prompt length <= ${COMPLEXITY_THRESHOLDS.light} characters`,
         reasoning: `${COMPLEXITY_THRESHOLDS.light} < prompt length <= ${COMPLEXITY_THRESHOLDS.reasoning} characters`,

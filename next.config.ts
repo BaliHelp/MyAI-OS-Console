@@ -30,6 +30,24 @@ const nextConfig: NextConfig = {
   // Vercel-friendly output
   output: "standalone",
 
+  // sharp ships a native (.so) binary — keep it a true runtime `require` instead of letting
+  // Turbopack/webpack trace and bundle it, which has been dropping libvips-cpp.so.* from the
+  // standalone output on fresh rebuilds (ERR_DLOPEN_FAILED at cold start, prod incident
+  // 2026-08-22). outputFileTracingIncludes force-includes the actual linux-x64 binary files
+  // for every route that imports sharp (lib/file-parser.ts, lib/data-center.ts) so they land
+  // in the deployed function regardless of how tracing resolves the external require.
+  serverExternalPackages: ["sharp"],
+  outputFileTracingIncludes: {
+    "/api/v1/chat/completions/route": [
+      "./node_modules/@img/sharp-linux-x64/**/*",
+      "./node_modules/@img/sharp-libvips-linux-x64/**/*",
+    ],
+    "/api/v1/data-center/**/route": [
+      "./node_modules/@img/sharp-linux-x64/**/*",
+      "./node_modules/@img/sharp-libvips-linux-x64/**/*",
+    ],
+  },
+
   // TypeScript — fail build on errors
   typescript: { ignoreBuildErrors: false },
 };
