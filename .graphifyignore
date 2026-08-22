@@ -1,0 +1,4 @@
+# Real customer PII (passport scans, bank statements, visa/stay-permit documents used as
+# OCR training samples) — never extract/summarize these into graphify-out/graph.json or
+# GRAPH_REPORT.md. Keep this excluded even if the folder is renamed/reorganized.
+public/Knowladge OCR Training/
