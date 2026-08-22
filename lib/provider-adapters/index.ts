@@ -29,7 +29,13 @@ export const PROVIDER_REGISTRY: Record<string, ProviderAdapter> = {
   // app/api/v1/chat/completions/route.ts.
   deepseek_reasoning: deepseekAdapter,
   deepseek_top: deepseekAdapter,
-  others: customOpenaiAdapter,
+  // Same OpenAI-compatible adapter, driven purely by each key's base_url/model_name — kept as
+  // distinct provider identities (not one shared "others" bucket) so provider_scope grants and
+  // field pool tiers can target exactly one of them. A shared "others" made it impossible to
+  // grant a client access to Kimi without also granting OpenRouter, and vice versa.
+  kimi: customOpenaiAdapter,
+  openrouter: customOpenaiAdapter,
+  qwen: customOpenaiAdapter,
   custom_openai: customOpenaiAdapter,
 };
 

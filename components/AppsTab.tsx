@@ -6,7 +6,7 @@ import { useState, useMemo, FormEvent } from "react";
 // This is the single source of truth for supported providers in the UI.
 // Kept in-component to avoid Next.js client/server boundary issues with lib/.
 // When adding a new provider: add adapter to lib/provider-adapters/, then add here.
-const SUPPORTED_PROVIDERS = ["gemini", "gpt", "claude", "grok", "deepseek", "deepseek_reasoning", "deepseek_top", "others"];
+const SUPPORTED_PROVIDERS = ["gemini", "gpt", "claude", "grok", "deepseek", "deepseek_reasoning", "deepseek_top", "kimi", "openrouter", "qwen"];
 import { 
   AppWindow, 
   Plus, 

@@ -32,6 +32,12 @@ const PROVIDER_DISPLAY_NAME: Record<string, string> = {
   // provider so callers scanning `models` for TTS/STT availability find it by name instead of
   // the raw internal key label.
   google_tts_stt: "Google TTS/STT",
+  // Previously shared one vague 'others' provider string with OpenRouter — split into
+  // dedicated identities (2026-08-22) so provider_scope/pool-tier config can target exactly
+  // one of them instead of granting/routing to both together.
+  kimi: "Moonshot Kimi",
+  openrouter: "OpenRouter",
+  qwen: "Qwen",
 };
 
 // Used only for the top-level `models` summary — collapses deepseek_reasoning/deepseek_top back
