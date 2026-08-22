@@ -27,6 +27,11 @@ const PROVIDER_DISPLAY_NAME: Record<string, string> = {
   // already communicates which one it is).
   deepseek_reasoning: "DeepSeek",
   deepseek_top: "DeepSeek",
+  // Restricted-purpose credential (Google-side blocked from the Generative Language API,
+  // works only for Cloud TTS/STT — see TTS_STT_KEY_NOTICE below). Listed here under its own
+  // provider so callers scanning `models` for TTS/STT availability find it by name instead of
+  // the raw internal key label.
+  google_tts_stt: "Google TTS/STT",
 };
 
 // Used only for the top-level `models` summary — collapses deepseek_reasoning/deepseek_top back
@@ -47,15 +52,20 @@ const TIER_UPDATE_NOTICE =
 
 // Ecosystem also holds a Google API key restricted (by Google, at the project/API level) to
 // Cloud Text-to-Speech & Speech-to-Text only — it 403s on the Generative Language API on
-// purpose. It is NOT part of the `models`/`tiers` Gemini pool above and cannot serve
-// chat/reasoning/OCR fields; documented here so a caller doesn't assume "Gemini" here implies
-// TTS/STT is also reachable through this gateway.
+// purpose, so it's listed under its own 'google_tts_stt' provider (not folded into 'gemini')
+// and has no gw_field_pool_assignments row — no chat/reasoning/OCR field routes to it today.
+// Documented here so a caller doesn't assume Gemini capacity above implies TTS/STT, and so a
+// future integration (e.g. an article-to-speech feature) knows this credential exists and is
+// reachable directly against Google's Cloud TTS/STT REST APIs (not through this gateway's
+// chat-completions routing, which has no TTS/STT adapter yet).
 const TTS_STT_KEY_NOTICE =
-  "Ekosistem ini juga memiliki 1 API key Google terpisah yang dibatasi Google khusus untuk " +
-  "Cloud Text-to-Speech & Speech-to-Text saja — bukan untuk Gemini chat/reasoning/OCR umum. " +
-  "Key tersebut TIDAK termasuk dalam daftar 'models' atau 'tiers' provider Gemini di atas dan " +
-  "tidak bisa dipakai untuk field apa pun di Gateway ini. Jangan asumsikan kapasitas Gemini di " +
-  "atas mencakup TTS/STT.";
+  "Ekosistem ini juga memiliki 1 API key Google (provider 'google_tts_stt' di atas) yang " +
+  "dibatasi Google khusus untuk Cloud Text-to-Speech & Speech-to-Text saja — bukan untuk " +
+  "Gemini chat/reasoning/OCR umum, dan tidak dirutekan ke field apa pun di Gateway ini. " +
+  "Jangan asumsikan kapasitas Gemini di atas mencakup TTS/STT. Key ini sengaja disiapkan " +
+  "untuk kebutuhan text-to-speech/speech-to-text aplikasi seperti NewsBali/NewsKotabunan " +
+  "di masa depan — hubungi admin Gateway untuk akses, karena belum ada endpoint TTS/STT " +
+  "khusus di Gateway ini (integrasi langsung ke Google Cloud REST API).";
 
 export async function GET() {
   if (!supabaseAdmin) {
