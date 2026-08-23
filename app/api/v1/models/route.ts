@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
-import { DEFAULT_MODEL_BY_PROVIDER, PUBLIC_PROVIDER_NAME } from "@/lib/provider-adapters";
+import { DEFAULT_MODEL_BY_PROVIDER, PUBLIC_PROVIDER_NAME, PROVIDER_REGISTRY } from "@/lib/provider-adapters";
 import { COMPLEXITY_THRESHOLDS } from "@/lib/classify-complexity";
 
 // Deliberately public (see PUBLIC_PATHS in proxy.ts) — meant for any client site using the
@@ -49,6 +49,66 @@ const PROVIDER_DISPLAY_NAME: Record<string, string> = {
 // flat list dedupes to "DeepSeek offers these N models" instead of listing the same model under
 // 3 internal provider names. The `tiers` section below keeps them distinct on purpose, since
 // that's exactly the routing detail it exists to show.
+
+// Per-model detail, keyed by the exact `model` string. Facts (context window, pricing, release
+// date) are sourced from each vendor's own docs/pricing pages as of 2026-08-24, not invented —
+// re-verify before trusting numbers here long after that date, vendors revise pricing/limits
+// often. `supports_vision`/`supports_tools` are NOT duplicated here — derived below from
+// PROVIDER_REGISTRY (vision) and a hardcoded tools allowlist, so they can never drift from what
+// the gateway actually enforces at request time.
+interface ModelDetail {
+  description: string;
+  context_window?: string;
+  pricing_per_million_tokens?: string;
+  notes?: string;
+}
+const MODEL_DETAILS: Record<string, ModelDetail> = {
+  "claude-sonnet-4-5": {
+    description: "Anthropic's flagship Sonnet model — optimized for agentic workflows, coding, and multi-step tool orchestration. State-of-the-art on coding benchmarks (SWE-bench Verified).",
+    context_window: "1M tokens in, 64K tokens out",
+    pricing_per_million_tokens: "$3 input / $15 output",
+  },
+  "gpt-4o-mini": {
+    description: "OpenAI's fast, affordable multimodal model for focused tasks — classification, extraction, translation, structured output.",
+    context_window: "128K tokens in, 16K tokens out",
+    pricing_per_million_tokens: "$0.15 input / $0.60 output",
+    notes: "The only provider this gateway currently has real tool-calling (function calling) support for — see the tools-lock in chat/completions routing.",
+  },
+  "gemini-3.5-flash-lite": {
+    description: "Google's low-latency, cost-effective multimodal model for high-throughput agentic workflows, document processing, and classification. Accepts text, image, speech, and video input.",
+    context_window: "1M tokens in, 64K tokens out",
+    pricing_per_million_tokens: "$0.30 input / $2.50 output",
+  },
+  "grok-4.5": {
+    description: "xAI's model with configurable internal reasoning effort (low/medium/high) applied before answering. Accepts text, images, and PDF files as input.",
+    context_window: "500K tokens (pricing doubles beyond 200K)",
+    pricing_per_million_tokens: "$2.00 input / $6.00 output (below 200K context)",
+  },
+  "deepseek-chat": {
+    description: "General-purpose (non-reasoning) DeepSeek chat model.",
+    notes: "Legacy model ID — DeepSeek's current official pricing/docs page (checked 2026-08-24) no longer lists 'deepseek-chat', only deepseek-v4-flash/deepseek-v4-pro/deepseek-v4-flash-vision-exp. The alias is still live and functional as verified in this gateway, but treat it as best-effort, not guaranteed long-term — migrating to the v4 model IDs is on the radar.",
+  },
+  "deepseek-reasoner": {
+    description: "Reasoning-specialized DeepSeek model — spends part of its token budget on internal chain-of-thought (a separate reasoning_content field) before emitting the final answer.",
+    notes: "Same legacy-ID caveat as deepseek-chat (see above). This gateway raises max_tokens to 8000 by default for this model specifically, and treats an empty answer at the token ceiling as a retriable failure rather than a false success — see lib/provider-adapters/deepseek.ts.",
+  },
+  "kimi-k3": {
+    description: "Moonshot AI's flagship model — 2.8T total parameters, launched 2026-07-16. Strong reasoning and long-context performance.",
+    context_window: "1M tokens",
+    pricing_per_million_tokens: "$3 input / $15 output ($0.30/M on cache hits)",
+  },
+  "kimi-k2.6": {
+    description: "Moonshot AI's value-tier chat model — cheaper than K3, general-purpose.",
+    pricing_per_million_tokens: "$0.95 input / $4.00 output",
+  },
+  "qwen3.8-max": {
+    description: "Alibaba's flagship Qwen model — 2.4T total parameters (~95B active, Sparse Mixture-of-Experts), released 2026-08-03. Accepts text, image, and video input.",
+    context_window: "up to 1M tokens in (991K max), 131K tokens out",
+  },
+  "qwen/qwen-2.5-72b-instruct": {
+    description: "Qwen 2.5 72B Instruct, accessed via OpenRouter (a third-party model aggregator) rather than a direct Alibaba connection — kept as a fallback option, not this gateway's primary route to Qwen.",
+  },
+};
 
 const TIER_UPDATE_NOTICE =
   "Struktur tier & model bisa berubah sewaktu-waktu (siklus review internal setiap 12 jam). " +
@@ -112,16 +172,38 @@ export async function GET() {
     candidatesByProvider.set(row.provider, list);
   }
 
+  // Real tool-calling (function calling) support, as actually implemented in this gateway's
+  // adapters today — not what each vendor's own API is capable of. Only gpt.ts forwards `tools`
+  // to the provider and parses `tool_calls` back out; every other adapter silently ignores
+  // `tools` even though several vendors (Claude, Kimi) support it natively. Single source of
+  // truth so `/api/v1/models` can never claim tool support this gateway doesn't actually honor.
+  const TOOLS_CAPABLE_PROVIDERS = new Set(["gpt"]);
+
   // ── Top-level flat summary: "what's live" ──────────────────────────────
   const seen = new Set<string>();
-  const models: Array<{ name: string; provider: string; model: string }> = [];
+  const models: Array<{
+    name: string; provider: string; model: string;
+    description?: string; context_window?: string; pricing_per_million_tokens?: string;
+    supports_vision: boolean; supports_tools: boolean; notes?: string;
+  }> = [];
   for (const [provider, candidates] of candidatesByProvider) {
     const publicProvider = PUBLIC_PROVIDER_NAME[provider] || provider;
     for (const c of candidates) {
       const dedupeKey = `${publicProvider}::${c.model}`;
       if (seen.has(dedupeKey)) continue;
       seen.add(dedupeKey);
-      models.push({ name: c.name, provider: publicProvider, model: c.model });
+      const detail = MODEL_DETAILS[c.model];
+      models.push({
+        name: c.name,
+        provider: publicProvider,
+        model: c.model,
+        description: detail?.description,
+        context_window: detail?.context_window,
+        pricing_per_million_tokens: detail?.pricing_per_million_tokens,
+        supports_vision: PROVIDER_REGISTRY[provider]?.supportsVision ?? false,
+        supports_tools: TOOLS_CAPABLE_PROVIDERS.has(provider),
+        notes: detail?.notes,
+      });
     }
   }
 
