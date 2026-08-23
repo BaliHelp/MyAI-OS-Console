@@ -93,17 +93,19 @@ const MODEL_DETAILS: Record<string, ModelDetail> = {
     notes: "Same legacy-ID caveat as deepseek-chat (see above). This gateway raises max_tokens to 8000 by default for this model specifically, and treats an empty answer at the token ceiling as a retriable failure rather than a false success — see lib/provider-adapters/deepseek.ts.",
   },
   "kimi-k3": {
-    description: "Moonshot AI's flagship model — 2.8T total parameters, launched 2026-07-16. Strong reasoning and long-context performance.",
+    description: "Moonshot AI's flagship model — 2.8T total parameters, launched 2026-07-16. This is a reasoning model: thinking mode is permanently on (cannot be disabled), depth controlled via reasoning_effort (low/high/max, default max). Streaming responses separate the thinking trace (reasoning_content) from the final answer (content).",
     context_window: "1M tokens",
     pricing_per_million_tokens: "$3 input / $15 output ($0.30/M on cache hits)",
+    notes: "This gateway calls it at the default reasoning_effort (max) — no gateway parameter to lower it yet. See also deepseek-reasoner above for the same reasoning_content-vs-content split pattern.",
   },
   "kimi-k2.6": {
-    description: "Moonshot AI's value-tier chat model — cheaper than K3, general-purpose.",
+    description: "Moonshot AI's value-tier chat model — cheaper than K3, general-purpose (not a reasoning model).",
     pricing_per_million_tokens: "$0.95 input / $4.00 output",
   },
   "qwen3.8-max": {
-    description: "Alibaba's flagship Qwen model — 2.4T total parameters (~95B active, Sparse Mixture-of-Experts), released 2026-08-03. Accepts text, image, and video input.",
+    description: "Alibaba's flagship Qwen model — 2.4T total parameters (~95B active, Sparse Mixture-of-Experts), released 2026-08-03. Accepts text, image, and video input. Hybrid reasoning model: thinking mode is toggleable per-request (enable_thinking) with a thinking_budget cap on reasoning tokens, unlike Kimi K3's always-on reasoning.",
     context_window: "up to 1M tokens in (991K max), 131K tokens out",
+    notes: "This gateway does not currently set enable_thinking explicitly, so behavior follows Alibaba's default for this model rather than a gateway-chosen setting.",
   },
   "qwen/qwen-2.5-72b-instruct": {
     description: "Qwen 2.5 72B Instruct, accessed via OpenRouter (a third-party model aggregator) rather than a direct Alibaba connection — kept as a fallback option, not this gateway's primary route to Qwen.",
