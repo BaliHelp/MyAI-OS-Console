@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
-import { DEFAULT_MODEL_BY_PROVIDER } from "@/lib/provider-adapters";
+import { DEFAULT_MODEL_BY_PROVIDER, PUBLIC_PROVIDER_NAME } from "@/lib/provider-adapters";
 import { COMPLEXITY_THRESHOLDS } from "@/lib/classify-complexity";
 
 // Deliberately public (see PUBLIC_PATHS in proxy.ts) — meant for any client site using the
@@ -40,18 +40,11 @@ const PROVIDER_DISPLAY_NAME: Record<string, string> = {
   qwen: "Qwen",
 };
 
-// Used only for the top-level `models` summary — collapses deepseek_reasoning/deepseek_top back
-// to 'deepseek' so that flat list dedupes to "DeepSeek offers these N models" instead of
-// listing the same model 3x under 3 internal provider names. The `tiers` section below keeps
-// them distinct on purpose, since that's exactly the routing detail it exists to show.
-const PUBLIC_PROVIDER_NAME: Record<string, string> = {
-  deepseek_reasoning: "deepseek",
-  deepseek_top: "deepseek",
-  // Same reasoning: kimi_k3 exists as its own provider purely for tier-pooling isolation (see
-  // lib/provider-adapters/index.ts) — folded back into 'kimi' here so the flat list reads as
-  // "Kimi offers these 2 models" instead of a 3rd near-duplicate provider entry.
-  kimi_k3: "kimi",
-};
+// PUBLIC_PROVIDER_NAME (imported above) is used only for the top-level `models` summary — it
+// collapses deepseek_reasoning/deepseek_top/kimi_k3 back to their public parent provider so the
+// flat list dedupes to "DeepSeek offers these N models" instead of listing the same model under
+// 3 internal provider names. The `tiers` section below keeps them distinct on purpose, since
+// that's exactly the routing detail it exists to show.
 
 const TIER_UPDATE_NOTICE =
   "Struktur tier & model bisa berubah sewaktu-waktu (siklus review internal setiap 12 jam). " +

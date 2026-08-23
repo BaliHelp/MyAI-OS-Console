@@ -62,6 +62,21 @@ export const DEFAULT_MODEL_BY_PROVIDER: Record<string, string> = {
 };
 
 /**
+ * Maps a pooling-isolation-only provider identity back to the public name a caller would
+ * recognize (e.g. from GET /api/v1/models or their own explicit `model`/`provider` override).
+ * deepseek_reasoning/deepseek_top/kimi_k3 exist purely so complexity-tiering's tier-pooling
+ * (which groups strictly by provider string) never mixes them with their "parent" provider's
+ * own tier — not a distinction external callers should need to know about. Single source of
+ * truth shared by GET /api/v1/models (display) and the chat completions route (resolving an
+ * explicit override back to every internal provider that can serve it).
+ */
+export const PUBLIC_PROVIDER_NAME: Record<string, string> = {
+  deepseek_reasoning: "deepseek",
+  deepseek_top: "deepseek",
+  kimi_k3: "kimi",
+};
+
+/**
  * Returns the ordered list of supported provider names for use in UI dropdowns.
  * Adding a new provider to PROVIDER_REGISTRY automatically exposes it in the UI.
  */

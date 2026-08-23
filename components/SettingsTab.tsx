@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, FormEvent } from "react";
-import { User, Sun, Moon, Sliders, ExternalLink, Code, KeyRound, Trash2, ToggleLeft, ToggleRight, Sparkles, ShieldCheck, Eye, EyeOff, Pencil } from "lucide-react";
+import { User, Sun, Moon, Sliders, ExternalLink, Code, KeyRound, Trash2, ToggleLeft, ToggleRight, Sparkles, ShieldCheck, Eye, EyeOff, Pencil, Copy } from "lucide-react";
 import { Language } from "@/lib/types";
 import { translations } from "@/lib/i18n";
 
@@ -156,6 +156,11 @@ export default function SettingsTab({ lang, setLang, theme, setTheme, adminEmail
   const [modelName, setModelName] = useState("");
   const [addingKey, setAddingKey] = useState(false);
   const [error, setError] = useState("");
+  // "Duplikat sebagai model baru": reuse an existing key's secret to register another
+  // routable model (e.g. adding kimi-k3 off the same Moonshot key as kimi-k2.6) without
+  // re-pasting the API key or going through SQL directly.
+  const [duplicateFromId, setDuplicateFromId] = useState<string | null>(null);
+  const [duplicateFromLabel, setDuplicateFromLabel] = useState("");
 
   // Change Password State & Visibility toggles
   const [currentPassword, setCurrentPassword] = useState("");
@@ -235,7 +240,7 @@ export default function SettingsTab({ lang, setLang, theme, setTheme, adminEmail
   const handleAddProviderKey = async (e: FormEvent) => {
     e.preventDefault();
     setError("");
-    if (!apiKey) return;
+    if (!duplicateFromId && !apiKey) return;
     setAddingKey(true);
 
     try {
@@ -245,8 +250,9 @@ export default function SettingsTab({ lang, setLang, theme, setTheme, adminEmail
         body: JSON.stringify({
           provider,
           label,
-          api_key: apiKey,
-          base_url: provider === "others" ? baseUrl : null,
+          ...(duplicateFromId
+            ? { duplicate_from_id: duplicateFromId }
+            : { api_key: apiKey, base_url: provider === "others" ? baseUrl : null }),
           model_name: modelName.trim() || null
         }),
       });
@@ -260,12 +266,30 @@ export default function SettingsTab({ lang, setLang, theme, setTheme, adminEmail
       setApiKey("");
       setBaseUrl("");
       setModelName("");
+      setDuplicateFromId(null);
+      setDuplicateFromLabel("");
       await fetchProviderKeys();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Gagal menambahkan API key.");
     } finally {
       setAddingKey(false);
     }
+  };
+
+  const handleStartDuplicate = (k: ProviderKey) => {
+    setDuplicateFromId(k.id);
+    setDuplicateFromLabel(k.label || k.provider);
+    setProvider(k.provider);
+    setLabel("");
+    setModelName("");
+    setApiKey("");
+    setError("");
+    document.getElementById("provider-keys-card")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  const handleCancelDuplicate = () => {
+    setDuplicateFromId(null);
+    setDuplicateFromLabel("");
   };
 
   const handleDeleteKey = async (id: string) => {
@@ -495,7 +519,14 @@ export default function SettingsTab({ lang, setLang, theme, setTheme, adminEmail
               <h5 className="text-xs font-bold tracking-wider uppercase opacity-85 flex items-center gap-1.5 text-bento-text-primary">
                 <Sparkles className="h-3.5 w-3.5 text-bento-accent" /> Tambah API Key Provider
               </h5>
-              
+
+              {duplicateFromId && (
+                <div className="p-2.5 bg-bento-accent/10 text-bento-accent text-xs font-semibold rounded-lg flex items-center justify-between gap-3">
+                  <span>Menduplikat API key dari <strong>{duplicateFromLabel}</strong> — tidak perlu isi ulang key, cukup atur provider/label/model untuk model barunya.</span>
+                  <button type="button" onClick={handleCancelDuplicate} className="shrink-0 underline hover:no-underline">Batal</button>
+                </div>
+              )}
+
               {error && (
                 <div className="p-2.5 bg-red-500/10 text-red-400 text-xs font-semibold rounded-lg">
                   ⚠️ {error}
@@ -541,11 +572,12 @@ export default function SettingsTab({ lang, setLang, theme, setTheme, adminEmail
                     <label className="text-[10px] font-bold uppercase tracking-wider text-bento-text-secondary">Kunci API (API Key)</label>
                     <input
                       type="password"
-                      placeholder="AIzaSy... / sk-..."
-                      required
+                      placeholder={duplicateFromId ? "(pakai key yang sama)" : "AIzaSy... / sk-..."}
+                      required={!duplicateFromId}
+                      disabled={!!duplicateFromId}
                       value={apiKey}
                       onChange={(e) => setApiKey(e.target.value)}
-                      className="w-full px-3 py-2 text-xs rounded-lg border border-bento-border bg-bento-surface text-bento-text-primary focus:outline-none"
+                      className="w-full px-3 py-2 text-xs rounded-lg border border-bento-border bg-bento-surface text-bento-text-primary focus:outline-none disabled:opacity-50"
                     />
                   </div>
                 </div>
@@ -734,6 +766,14 @@ export default function SettingsTab({ lang, setLang, theme, setTheme, adminEmail
                       </div>
 
                       <div className="flex items-center gap-2.5 self-end md:self-auto">
+                        <button
+                          type="button"
+                          onClick={() => handleStartDuplicate(k)}
+                          title="Duplikat sebagai model baru (pakai API key yang sama)"
+                          className="p-1.5 rounded-lg hover:bg-bento-surface-lighter text-bento-text-secondary hover:text-bento-text-primary transition-all"
+                        >
+                          <Copy className="h-4 w-4" />
+                        </button>
                         <button
                           type="button"
                           onClick={() => handleTestConnection(k.id)}

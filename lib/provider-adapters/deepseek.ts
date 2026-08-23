@@ -20,6 +20,17 @@ export const deepseekAdapter: ProviderAdapter = {
 
   async call(providerApiKey, prompt, systemPrompt, options, _fileData, selectedKeyId, selectedKeyLabel = "") {
     try {
+      const model = options.model_name || DEEPSEEK_DEFAULT_MODEL;
+      const isReasoner = model === DEEPSEEK_REASONER_MODEL;
+
+      // deepseek-reasoner spends part of max_tokens on its internal reasoning_content before it
+      // ever emits the final answer's `content`. At the old flat default (2000) a non-trivial
+      // prompt could burn the whole budget on reasoning and finish with finish_reason:"length"
+      // and an EMPTY content string — a silent 200 with completion_tokens:2000 and nothing to
+      // show for it. Reasoner gets a much larger budget so hitting the ceiling before any answer
+      // text is emitted becomes rare; deepseek-chat (no separate reasoning phase) is unaffected.
+      const defaultMaxTokens = isReasoner ? 8000 : 2000;
+
       const res = await fetch("https://api.deepseek.com/chat/completions", {
         method: "POST",
         headers: {
@@ -27,13 +38,13 @@ export const deepseekAdapter: ProviderAdapter = {
           Authorization: `Bearer ${providerApiKey}`,
         },
         body: JSON.stringify({
-          model: options.model_name || DEEPSEEK_DEFAULT_MODEL,
+          model,
           messages: [
             { role: "system", content: systemPrompt },
             { role: "user", content: prompt },
           ],
           temperature: options.temperature ?? 0.7,
-          max_tokens: options.max_tokens ?? 2000,
+          max_tokens: options.max_tokens ?? defaultMaxTokens,
           ...(options.stream ? { stream: true, stream_options: { include_usage: true } } : {}),
         }),
       });
@@ -60,9 +71,22 @@ export const deepseekAdapter: ProviderAdapter = {
       }
 
       const resJson = await res.json();
-      const aiResponseText = resJson.choices?.[0]?.message?.content || "";
+      const choice = resJson.choices?.[0];
+      const aiResponseText = choice?.message?.content || "";
       const promptTokens = resJson.usage?.prompt_tokens || 0;
       const completionTokens = resJson.usage?.completion_tokens || 0;
+
+      // Ran out of max_tokens before any answer text came out (all budget went to
+      // reasoning_content, or the answer itself got cut mid-stream to nothing usable). Treat as
+      // retriable rather than a false "success" with an empty result — the tier loop above
+      // falls through to the next candidate/tier on a non-400 failure, same as a 429/5xx would,
+      // instead of silently handing the caller an empty string.
+      if (!aiResponseText && choice?.finish_reason === "length") {
+        const errorMsg = `Deepseek (${model}) exhausted max_tokens (${options.max_tokens ?? defaultMaxTokens}) before producing any answer text (finish_reason: length, completion_tokens: ${completionTokens}).`;
+        console.warn(`[gateway] ${errorMsg} Key: ${selectedKeyLabel}.`);
+        return { success: false, aiResponseText: "", promptTokens, completionTokens, errorMsg, status: 503 };
+      }
+
       return { success: true, aiResponseText, promptTokens, completionTokens, errorMsg: "", status: 200 };
     } catch (err: any) {
       console.error(`[gateway] Exception calling Deepseek (${selectedKeyLabel}):`, err);

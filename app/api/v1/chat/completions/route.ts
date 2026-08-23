@@ -537,6 +537,136 @@ ${liveDiagnosticSummary}
     // Get sorted list of tiers (e.g., [1, 2, 3])
     const sortedTiers = Object.keys(tierGroups).map(Number).sort((a, b) => a - b);
 
+    // ── Explicit model/provider override ──────────────────────────────────
+    // Optional escape hatch from field-based auto-routing (classifyComplexity + tier chains):
+    // a caller who wants a SPECIFIC model can pass `model` (exact model string, matching what
+    // GET /api/v1/models reports, e.g. "kimi-k3") or a coarser `provider` (public provider name
+    // from the same endpoint, e.g. "deepseek" — matches deepseek/deepseek_reasoning/deepseek_top
+    // together via PUBLIC_PROVIDER_NAME). When either is present this completely bypasses the
+    // field's complexity/tier chain below: the caller made an explicit choice, so on failure we
+    // report it back (see `if (!success)` further down, shared with the normal path) rather than
+    // silently substituting the field's own auto-routed fallback, which the caller may not want.
+    const overrideModel = typeof body.model === "string" && body.model.trim() ? body.model.trim() : null;
+    const overrideProvider = typeof body.provider === "string" && body.provider.trim() ? body.provider.trim() : null;
+
+    if (overrideModel || overrideProvider) {
+      const { data: allActiveKeys, error: allKeysErr } = await supabaseAdmin
+        .from("gw_provider_keys")
+        .select("id, provider, key_encrypted, usage_count, last_used_at, label, priority, cooldown_until, consecutive_429_count, base_url, model_name")
+        .eq("status", "active");
+
+      if (allKeysErr) {
+        return NextResponse.json({ error: `Failed to resolve model/provider override: ${allKeysErr.message}` }, { status: 500 });
+      }
+
+      const matchesOverride = (allActiveKeys || []).filter((k) => {
+        if (overrideModel) {
+          const resolvedModel = k.model_name || DEFAULT_MODEL_BY_PROVIDER[k.provider] || null;
+          return resolvedModel === overrideModel;
+        }
+        const publicProvider = PUBLIC_PROVIDER_NAME[k.provider] || k.provider;
+        return publicProvider === overrideProvider;
+      });
+
+      // Same capability/scope guards the normal tier loop applies per-provider below.
+      const inScopeMatches = matchesOverride
+        .filter((k) => !keyData.provider_scope || keyData.provider_scope.includes(k.provider))
+        .filter((k) => !requiresVision || PROVIDER_REGISTRY[k.provider]?.supportsVision === true)
+        .filter((k) => !hasTools || k.provider === "gpt")
+        .filter((k) => !(k.cooldown_until && new Date(k.cooldown_until) > new Date()));
+
+      if (inScopeMatches.length === 0) {
+        const target = overrideModel ? `model '${overrideModel}'` : `provider '${overrideProvider}'`;
+        return NextResponse.json(
+          {
+            error: `No active, in-scope key found for ${target}. Check GET /api/v1/models for currently available options, and confirm this key's provider_scope grants access${requiresVision ? " and supports vision" : ""}${hasTools ? " (tools mode requires gpt)" : ""}.`,
+          },
+          { status: 400 }
+        );
+      }
+
+      interface OverrideCandidate {
+        id: string; key: string; label: string; provider: string; usageCount: number;
+        priority: number; lastUsedAt: string | null; consecutive429Count: number;
+        base_url?: string | null; model_name?: string | null;
+      }
+      const overrideCandidates: OverrideCandidate[] = [];
+      for (const k of inScopeMatches) {
+        try {
+          const raw = decryptKey(k.key_encrypted);
+          if (raw && !raw.includes("placeholder")) {
+            overrideCandidates.push({
+              id: k.id, key: raw, label: k.label || `${k.provider} key`, provider: k.provider,
+              usageCount: k.usage_count ?? 0, priority: k.priority ?? 0, lastUsedAt: k.last_used_at,
+              consecutive429Count: k.consecutive_429_count ?? 0, base_url: k.base_url, model_name: k.model_name
+            });
+          }
+        } catch (err) {
+          console.error(`[gateway] Decrypt error for override key ${k.label}:`, err);
+        }
+      }
+
+      // Same priority/recency/usage sort as the normal tier loop.
+      overrideCandidates.sort((a, b) => {
+        if (b.priority !== a.priority) return b.priority - a.priority;
+        if (!a.lastUsedAt && b.lastUsedAt) return -1;
+        if (a.lastUsedAt && !b.lastUsedAt) return 1;
+        if (a.lastUsedAt && b.lastUsedAt) {
+          const diff = new Date(a.lastUsedAt).getTime() - new Date(b.lastUsedAt).getTime();
+          if (diff !== 0) return diff;
+        }
+        return a.usageCount - b.usageCount;
+      });
+
+      tierUsed = 0; // not part of the field's own tier chain
+
+      for (const candidate of overrideCandidates) {
+        selectedKeyId = candidate.id;
+        selectedKeyLabel = candidate.label;
+        selectedUsageCount = candidate.usageCount;
+        providerUsed = candidate.provider;
+
+        console.log(`[gateway] override model=${overrideModel || "(any)"} provider=${overrideProvider || "(any)"} -> provider=${candidate.provider} model=${candidate.model_name || "(adapter default)"}`);
+
+        const resCall = await attemptCall(
+          candidate.provider, candidate.key, prompt, systemPrompt, body,
+          selectedKeyId, selectedKeyLabel, parsedFile, candidate.base_url,
+          hasTools ? "gpt-4o" : candidate.model_name
+        );
+
+        if (resCall.success) {
+          aiResponseText = resCall.aiResponseText;
+          promptTokens = resCall.promptTokens;
+          completionTokens = resCall.completionTokens;
+          toolCallsResult = resCall.toolCalls;
+          streamChunksResult = resCall.streamChunks;
+          success = true;
+          if (selectedKeyId && supabaseAdmin) {
+            await supabaseAdmin.from("gw_provider_keys").update({ consecutive_429_count: 0, cooldown_until: null }).eq("id", selectedKeyId);
+          }
+          break;
+        } else {
+          if (resCall.status === 400) {
+            return NextResponse.json({ error: resCall.errorMsg }, { status: 400 });
+          }
+          if ((resCall.status === 429 || resCall.status === 402) && selectedKeyId && supabaseAdmin) {
+            const consecutive = candidate.consecutive429Count;
+            const baseSecs = resCall.status === 402 ? 600 : 60;
+            const duration = baseSecs * Math.pow(2, Math.min(consecutive, 4));
+            const cappedDuration = Math.min(duration, 3600);
+            const cooldownTime = new Date(Date.now() + cappedDuration * 1000).toISOString();
+            await supabaseAdmin
+              .from("gw_provider_keys")
+              .update({ cooldown_until: cooldownTime, consecutive_429_count: consecutive + 1 })
+              .eq("id", selectedKeyId);
+          }
+          lastErrorMsg = resCall.errorMsg;
+          lastErrorStatus = resCall.status;
+        }
+      }
+      // Falls through to the shared `if (!success)` failure response below when every matching
+      // key failed — deliberately NOT falling back to the field's normal auto-routing chain.
+    } else {
     // Fail loudly when an image was uploaded but no vision-capable provider is configured and
     // in-scope for this field. Without this, the request would be filtered out of every tier
     // below and fall through to the misleading "No keys attempted" 503 — or, worse, reach a
@@ -800,6 +930,7 @@ ${liveDiagnosticSummary}
         }
       }
     }
+    } // end else (normal field-based tier routing)
 
     if (!success) {
       // Determine the most useful HTTP status to return to caller:
@@ -1076,7 +1207,7 @@ ${liveDiagnosticSummary}
 // ── attemptCall Helper Function ──────────────────────────────────────────
 // Uses the central ProviderAdapter registry instead of hardcoded if/else chains.
 // To support a new provider, add its adapter to lib/provider-adapters/index.ts only.
-import { PROVIDER_REGISTRY, DEFAULT_MODEL_BY_PROVIDER } from "@/lib/provider-adapters";
+import { PROVIDER_REGISTRY, DEFAULT_MODEL_BY_PROVIDER, PUBLIC_PROVIDER_NAME } from "@/lib/provider-adapters";
 
 export async function attemptCall(
   provider: string,

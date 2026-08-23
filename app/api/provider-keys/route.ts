@@ -33,22 +33,47 @@ export async function POST(req: NextRequest) {
   if (!supabaseAdmin) {
     return NextResponse.json({ error: "Database not configured" }, { status: 503 });
   }
-  const { provider, label, api_key, base_url, model_name } = await req.json();
+  const { provider, label, api_key, base_url, model_name, duplicate_from_id } = await req.json();
 
-  if (!provider || !api_key) {
-    return NextResponse.json({ error: "provider and api_key are required" }, { status: 400 });
+  if (!provider) {
+    return NextResponse.json({ error: "provider is required" }, { status: 400 });
   }
 
-  const keyEncrypted = encryptKey(api_key);
+  let keyEncrypted: string;
+  let inheritedBaseUrl: string | null = null;
+
+  if (duplicate_from_id) {
+    // "Add a connected model" from the dashboard, without re-pasting a secret: several
+    // providers (DeepSeek, Kimi, ...) use one account-level API key across their whole model
+    // lineup, and only need a new gw_provider_keys row — same ciphertext, different
+    // provider/model_name — to register another model as its own routable entry (see the
+    // deepseek_reasoning/deepseek_top/kimi_k3 additions this same pattern was hand-rolled for
+    // via direct SQL before this endpoint supported it). api_key is not required in this mode.
+    const { data: source, error: sourceErr } = await supabaseAdmin
+      .from("gw_provider_keys")
+      .select("key_encrypted, base_url")
+      .eq("id", duplicate_from_id)
+      .single();
+    if (sourceErr || !source) {
+      return NextResponse.json({ error: "duplicate_from_id does not reference an existing key" }, { status: 400 });
+    }
+    keyEncrypted = source.key_encrypted;
+    inheritedBaseUrl = source.base_url;
+  } else {
+    if (!api_key) {
+      return NextResponse.json({ error: "api_key is required unless duplicate_from_id is set" }, { status: 400 });
+    }
+    keyEncrypted = encryptKey(api_key);
+  }
 
   const { data, error } = await supabaseAdmin
     .from("gw_provider_keys")
-    .insert({ 
-      provider, 
-      label: label ?? null, 
-      key_encrypted: keyEncrypted, 
+    .insert({
+      provider,
+      label: label ?? null,
+      key_encrypted: keyEncrypted,
       status: "active",
-      base_url: base_url ?? null,
+      base_url: base_url ?? inheritedBaseUrl,
       model_name: model_name ?? null
     })
     .select("id, provider, label, status, usage_count, last_used_at, created_at, base_url, model_name")
