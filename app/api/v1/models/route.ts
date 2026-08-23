@@ -36,8 +36,12 @@ const PROVIDER_DISPLAY_NAME: Record<string, string> = {
   // dedicated identities (2026-08-22) so provider_scope/pool-tier config can target exactly
   // one of them instead of granting/routing to both together.
   kimi: "Moonshot Kimi",
-  openrouter: "OpenRouter",
   qwen: "Qwen",
+  // 'openrouter' deliberately has NO fixed entry here (unlike kimi/qwen above): OpenRouter is a
+  // genuine third-party aggregator proxying many different vendors' models, not one consistent
+  // product — a bare "OpenRouter" name told a caller nothing about which underlying model they'd
+  // actually get. Falls through to the key's own label below (e.g. "OpenRouter (Qwen 2.5 72B)"),
+  // same reasoning as the "others"/custom_openai fallback further down.
 };
 
 // PUBLIC_PROVIDER_NAME (imported above) is used only for the top-level `models` summary — it
