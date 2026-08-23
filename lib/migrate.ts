@@ -29,6 +29,18 @@ export async function importEnvProviderKeys(): Promise<void> {
     { envVar: "GROK_API_KEY1", provider: "grok", label: "Grok Key 1", priority: 0 },
     // Deepseek Keys
     { envVar: "DEEPSEEK_API_KEY1", provider: "deepseek", label: "Deepseek Key 1", priority: 0 },
+    // Kimi/Qwen/OpenRouter — unlike the providers above, these have no adapter-level default
+    // model (see DEFAULT_MODEL_BY_PROVIDER in lib/provider-adapters/index.ts), so model_name is
+    // required here or the key would resolve to no usable model at all. base_url is likewise
+    // required for anything but 'openrouter' — the generic OpenAI-compatible adapter defaults to
+    // OpenRouter's endpoint when base_url is unset, so omitting it for kimi/qwen would silently
+    // send that account's key to the wrong server. deepseek_reasoning/deepseek_top/kimi_k3 are
+    // intentionally NOT importable from env here — they're pooling-isolation-only rows that
+    // must already exist in the DB (see the migration that created them); this sync only ever
+    // creates the "plain" provider identity per secret.
+    { envVar: "KIMI_API_KEY1", provider: "kimi", label: "Moonshot Kimi", priority: 0, model_name: "kimi-k2.6", base_url: "https://api.moonshot.ai/v1" },
+    { envVar: "QWEN_API_KEY1", provider: "qwen", label: "Qwen 3.8 Max", priority: 0, model_name: "qwen3.8-max", base_url: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1" },
+    { envVar: "OPENROUTER_API_KEY1", provider: "openrouter", label: "OpenRouter (Qwen 2.5 72B)", priority: 0, model_name: "qwen/qwen-2.5-72b-instruct" },
   ];
 
   if (!supabaseAdmin) return;
@@ -36,7 +48,7 @@ export async function importEnvProviderKeys(): Promise<void> {
   // 1. Fetch all existing keys from the DB
   const { data: dbKeys, error: fetchError } = await supabaseAdmin
     .from("gw_provider_keys")
-    .select("id, key_encrypted, label, provider, status, priority");
+    .select("id, key_encrypted, label, provider, status, priority, model_name, base_url");
 
   if (fetchError) {
     console.log(`[migrate] Skip importing keys (table gw_provider_keys may not exist yet: ${fetchError.message})`);
@@ -77,15 +89,27 @@ export async function importEnvProviderKeys(): Promise<void> {
         console.log(`[migrate] Deleting duplicate key in DB: ${dbKey.label} (${dbKey.id})`);
         await supabaseAdmin.from("gw_provider_keys").delete().eq("id", dbKey.id);
       } else {
-        // Matched! Update its label, provider, and priority to match the env.
-        if (dbKey.label !== matchedEnv.label || dbKey.provider !== matchedEnv.provider || dbKey.priority !== matchedEnv.priority) {
+        // Matched! Update its label, provider, priority, and (only when the env entry actually
+        // specifies one — deepseek/gemini/gpt/claude/grok never do, relying on the adapter
+        // default instead) model_name/base_url to match the env.
+        const needsModelSync = matchedEnv.model_name !== undefined && dbKey.model_name !== matchedEnv.model_name;
+        const needsBaseUrlSync = matchedEnv.base_url !== undefined && dbKey.base_url !== matchedEnv.base_url;
+        if (
+          dbKey.label !== matchedEnv.label ||
+          dbKey.provider !== matchedEnv.provider ||
+          dbKey.priority !== matchedEnv.priority ||
+          needsModelSync ||
+          needsBaseUrlSync
+        ) {
           console.log(`[migrate] Updating label/provider/priority for key in DB: ${dbKey.label} -> ${matchedEnv.label}`);
           await supabaseAdmin
             .from("gw_provider_keys")
             .update({
               label: matchedEnv.label,
               provider: matchedEnv.provider,
-              priority: matchedEnv.priority
+              priority: matchedEnv.priority,
+              ...(needsModelSync ? { model_name: matchedEnv.model_name } : {}),
+              ...(needsBaseUrlSync ? { base_url: matchedEnv.base_url } : {}),
             })
             .eq("id", dbKey.id);
         }
@@ -94,12 +118,15 @@ export async function importEnvProviderKeys(): Promise<void> {
     } else {
       // It is not in the current env.
       // Is it a legacy auto-imported key? (A key whose label starts with one of our prefix labels)
-      const isLegacyAutoImported = 
-        dbKey.label?.startsWith("Gemini Key ") || 
-        dbKey.label?.startsWith("GPT Key ") || 
-        dbKey.label?.startsWith("Claude Key ") || 
+      const isLegacyAutoImported =
+        dbKey.label?.startsWith("Gemini Key ") ||
+        dbKey.label?.startsWith("GPT Key ") ||
+        dbKey.label?.startsWith("Claude Key ") ||
         dbKey.label?.startsWith("Grok Key ") ||
-        dbKey.label?.startsWith("Deepseek Key ");
+        dbKey.label?.startsWith("Deepseek Key ") ||
+        dbKey.label === "Moonshot Kimi" ||
+        dbKey.label === "Qwen 3.8 Max" ||
+        dbKey.label?.startsWith("OpenRouter");
       
       if (isLegacyAutoImported) {
         // Keep it in DB so database acts as the single source of truth,
@@ -120,7 +147,9 @@ export async function importEnvProviderKeys(): Promise<void> {
         label: envKey.label,
         key_encrypted: encrypted,
         status: "active",
-        priority: envKey.priority
+        priority: envKey.priority,
+        ...("model_name" in envKey ? { model_name: envKey.model_name } : {}),
+        ...("base_url" in envKey ? { base_url: envKey.base_url } : {}),
       });
       envValuesProcessed.add(dedupeKey);
     }

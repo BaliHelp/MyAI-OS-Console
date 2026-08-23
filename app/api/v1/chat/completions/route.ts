@@ -731,6 +731,7 @@ ${liveDiagnosticSummary}
         for (const p of providersInTier) {
           let envFallbackKey = "";
           let envFallbackModel: string | undefined;
+          let envFallbackBaseUrl: string | undefined;
           if (p === "gemini") envFallbackKey = process.env.GEMINI_API_KEY1 || process.env.GEMINI_API_KEY || "";
           else if (p === "gpt") envFallbackKey = process.env.OPENAI_API_KEY1 || process.env.OPENAI_API_KEY || "";
           else if (p === "claude") envFallbackKey = process.env.CLAUDE_API_KEY1 || process.env.CLAUDE_API_KEY || "";
@@ -744,6 +745,26 @@ ${liveDiagnosticSummary}
             envFallbackKey = process.env.DEEPSEEK_API_KEY1 || process.env.DEEPSEEK_API_KEY || "";
             envFallbackModel = DEFAULT_MODEL_BY_PROVIDER[p];
           }
+          // kimi_k3 piggybacks on the same Moonshot key as 'kimi' (one account key across their
+          // whole model lineup) — only the model differs, same pattern as deepseek's variants
+          // above. kimi/kimi_k3/qwen/openrouter all go through the generic OpenAI-compatible
+          // adapter, which needs base_url to know which server to hit — omitting it would send
+          // a Moonshot/Alibaba key to OpenRouter's endpoint by the adapter's own default.
+          else if (p === "kimi") {
+            envFallbackKey = process.env.KIMI_API_KEY1 || "";
+            envFallbackBaseUrl = "https://api.moonshot.ai/v1";
+          } else if (p === "kimi_k3") {
+            envFallbackKey = process.env.KIMI_API_KEY1 || "";
+            envFallbackModel = "kimi-k3";
+            envFallbackBaseUrl = "https://api.moonshot.ai/v1";
+          } else if (p === "qwen") {
+            envFallbackKey = process.env.QWEN_API_KEY1 || "";
+            envFallbackModel = "qwen3.8-max";
+            envFallbackBaseUrl = "https://dashscope-intl.aliyuncs.com/compatible-mode/v1";
+          } else if (p === "openrouter") {
+            envFallbackKey = process.env.OPENROUTER_API_KEY1 || "";
+            envFallbackModel = "qwen/qwen-2.5-72b-instruct";
+          }
 
           if (envFallbackKey && !envFallbackKey.includes("placeholder")) {
             candidates.push({
@@ -755,7 +776,8 @@ ${liveDiagnosticSummary}
               priority: 0,
               lastUsedAt: null,
               consecutive429Count: 0,
-              model_name: envFallbackModel
+              model_name: envFallbackModel,
+              base_url: envFallbackBaseUrl
             });
           }
         }
@@ -771,7 +793,7 @@ ${liveDiagnosticSummary}
           providerUsed = candidate.provider;
           const providerApiKey = candidate.key;
 
-          const resCall = await attemptCall(candidate.provider, providerApiKey, prompt, systemPrompt, body, selectedKeyId, selectedKeyLabel, parsedFile, undefined, hasTools ? "gpt-4o" : undefined);
+          const resCall = await attemptCall(candidate.provider, providerApiKey, prompt, systemPrompt, body, selectedKeyId, selectedKeyLabel, parsedFile, candidate.base_url, hasTools ? "gpt-4o" : candidate.model_name);
           if (resCall.success) {
             aiResponseText = resCall.aiResponseText;
             promptTokens = resCall.promptTokens;

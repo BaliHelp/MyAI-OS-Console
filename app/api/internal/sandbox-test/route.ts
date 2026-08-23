@@ -206,7 +206,7 @@ ${prompt}`;
         try {
           const { data } = await supabaseAdmin!
             .from("gw_provider_keys")
-            .select("id, provider, key_encrypted, usage_count, last_used_at, label, priority, cooldown_until, consecutive_429_count, model_name")
+            .select("id, provider, key_encrypted, usage_count, last_used_at, label, priority, cooldown_until, consecutive_429_count, model_name, base_url")
             .in("provider", providersInTier)
             .eq("status", "active");
           if (data) dbKeys = data;
@@ -221,6 +221,7 @@ ${prompt}`;
         for (const p of providersInTier) {
           let envFallbackKey = "";
           let envFallbackModel: string | undefined;
+          let envFallbackBaseUrl: string | undefined;
           if (p === "gemini") envFallbackKey = process.env.GEMINI_API_KEY1 || process.env.GEMINI_API_KEY || "";
           else if (p === "gpt") envFallbackKey = process.env.OPENAI_API_KEY1 || process.env.OPENAI_API_KEY || "";
           else if (p === "claude") envFallbackKey = process.env.CLAUDE_API_KEY1 || process.env.CLAUDE_API_KEY || "";
@@ -230,6 +231,20 @@ ${prompt}`;
             // Same DeepSeek account/key as 'deepseek' — only the model differs.
             envFallbackKey = process.env.DEEPSEEK_API_KEY1 || process.env.DEEPSEEK_API_KEY || "";
             envFallbackModel = DEFAULT_MODEL_BY_PROVIDER[p];
+          } else if (p === "kimi") {
+            envFallbackKey = process.env.KIMI_API_KEY1 || "";
+            envFallbackBaseUrl = "https://api.moonshot.ai/v1";
+          } else if (p === "kimi_k3") {
+            envFallbackKey = process.env.KIMI_API_KEY1 || "";
+            envFallbackModel = "kimi-k3";
+            envFallbackBaseUrl = "https://api.moonshot.ai/v1";
+          } else if (p === "qwen") {
+            envFallbackKey = process.env.QWEN_API_KEY1 || "";
+            envFallbackModel = "qwen3.8-max";
+            envFallbackBaseUrl = "https://dashscope-intl.aliyuncs.com/compatible-mode/v1";
+          } else if (p === "openrouter") {
+            envFallbackKey = process.env.OPENROUTER_API_KEY1 || "";
+            envFallbackModel = "qwen/qwen-2.5-72b-instruct";
           }
 
           if (envFallbackKey && !envFallbackKey.includes("placeholder")) {
@@ -242,7 +257,8 @@ ${prompt}`;
               priority: 0,
               lastUsedAt: null,
               consecutive429Count: 0,
-              model_name: envFallbackModel
+              model_name: envFallbackModel,
+              base_url: envFallbackBaseUrl
             });
           }
         }
@@ -254,7 +270,7 @@ ${prompt}`;
           providerUsed = candidate.provider;
           const providerApiKey = candidate.key;
 
-          const resCall = await attemptCall(candidate.provider, providerApiKey, finalPrompt, systemPrompt, body, selectedKeyId, selectedKeyLabel, parsedFile, undefined, candidate.model_name);
+          const resCall = await attemptCall(candidate.provider, providerApiKey, finalPrompt, systemPrompt, body, selectedKeyId, selectedKeyLabel, parsedFile, candidate.base_url, candidate.model_name);
           if (resCall.success) {
             aiResponseText = resCall.aiResponseText;
             promptTokens = resCall.promptTokens;
@@ -291,7 +307,8 @@ ${prompt}`;
               priority: k.priority || 0,
               lastUsedAt: k.last_used_at,
               consecutive429Count: k.consecutive_429_count ?? 0,
-              model_name: k.model_name
+              model_name: k.model_name,
+              base_url: k.base_url
             });
           }
         } catch (err) {
@@ -318,7 +335,7 @@ ${prompt}`;
         providerUsed = candidate.provider;
         const providerApiKey = candidate.key;
 
-        const resCall = await attemptCall(candidate.provider, providerApiKey, finalPrompt, systemPrompt, body, selectedKeyId, selectedKeyLabel, parsedFile, undefined, candidate.model_name);
+        const resCall = await attemptCall(candidate.provider, providerApiKey, finalPrompt, systemPrompt, body, selectedKeyId, selectedKeyLabel, parsedFile, candidate.base_url, candidate.model_name);
         if (resCall.success) {
           aiResponseText = resCall.aiResponseText;
           promptTokens = resCall.promptTokens;
