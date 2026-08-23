@@ -35,6 +35,15 @@ export const customOpenaiAdapter: ProviderAdapter = {
         }
       }
 
+      const model = options.model_name || "google/gemini-2.5-flash"; // Fallback to a default OpenRouter model if not specified
+
+      // kimi-k3 rejects any temperature other than 1 ("invalid temperature: only 1 is allowed
+      // for this model") — a hard 400 that, unlike a 429/5xx, aborts the whole request instead
+      // of falling through to the next candidate/tier, so this must be right rather than just
+      // best-effort. Every other OpenAI-compatible model behind this adapter accepts the normal
+      // range, so this stays scoped to that one model rather than changing the shared default.
+      const temperature = model === "kimi-k3" ? 1 : options.temperature ?? 0.7;
+
       const res = await fetch(targetUrl, {
         method: "POST",
         headers: {
@@ -45,12 +54,12 @@ export const customOpenaiAdapter: ProviderAdapter = {
           "X-Title": "MyAI OS Console Gateway",
         },
         body: JSON.stringify({
-          model: options.model_name || "google/gemini-2.5-flash", // Fallback to a default OpenRouter model if not specified
+          model,
           messages: [
             { role: "system", content: systemPrompt },
             { role: "user", content: contentArray },
           ],
-          temperature: options.temperature ?? 0.7,
+          temperature,
           max_tokens: options.max_tokens ?? 2000,
           ...(options.stream ? { stream: true, stream_options: { include_usage: true } } : {}),
         }),

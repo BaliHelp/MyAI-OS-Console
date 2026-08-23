@@ -218,7 +218,18 @@ export async function testProviderConnection(
   baseUrl: string | null,
   modelName: string | null
 ): Promise<ConnectionTestResult> {
-  if (provider === "others" || provider === "custom_openai") {
+  // kimi/openrouter/qwen/kimi_k3 are all OpenAI-compatible endpoints driven purely by base_url +
+  // model_name (see lib/provider-adapters/index.ts) — same probe as 'others'/'custom_openai'.
+  // This branch used to only match "others"/"custom_openai" from before the 'others' provider
+  // was split into these distinct names, which silently broke "Uji Koneksi" for all of them.
+  if (
+    provider === "others" ||
+    provider === "custom_openai" ||
+    provider === "kimi" ||
+    provider === "openrouter" ||
+    provider === "qwen" ||
+    provider === "kimi_k3"
+  ) {
     return testCustomOpenAiCompatible(rawKey, baseUrl, modelName);
   }
   if (provider === "gemini") return testGemini(rawKey, modelName);

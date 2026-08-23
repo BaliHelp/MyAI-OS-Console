@@ -518,6 +518,10 @@ export default function SettingsTab({ lang, setLang, theme, setTheme, adminEmail
                       <option value="deepseek">Deepseek AI (Reasoning & Chat)</option>
                       <option value="deepseek_reasoning">Deepseek Reasoner — Bucket &quot;reasoning&quot;</option>
                       <option value="deepseek_top">Deepseek Reasoner — Bucket &quot;top&quot;</option>
+                      <option value="kimi">Moonshot Kimi (K2.6)</option>
+                      <option value="kimi_k3">Moonshot Kimi K3 — Bucket &quot;top&quot; Tier 1</option>
+                      <option value="openrouter">OpenRouter</option>
+                      <option value="qwen">Qwen</option>
                       <option value="others">Others (GLM, Llama, DLL - Tier 2)</option>
                     </select>
                   </div>

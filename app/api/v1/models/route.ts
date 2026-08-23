@@ -47,6 +47,10 @@ const PROVIDER_DISPLAY_NAME: Record<string, string> = {
 const PUBLIC_PROVIDER_NAME: Record<string, string> = {
   deepseek_reasoning: "deepseek",
   deepseek_top: "deepseek",
+  // Same reasoning: kimi_k3 exists as its own provider purely for tier-pooling isolation (see
+  // lib/provider-adapters/index.ts) — folded back into 'kimi' here so the flat list reads as
+  // "Kimi offers these 2 models" instead of a 3rd near-duplicate provider entry.
+  kimi_k3: "kimi",
 };
 
 const TIER_UPDATE_NOTICE =

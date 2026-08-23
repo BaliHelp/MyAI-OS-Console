@@ -36,6 +36,12 @@ export const PROVIDER_REGISTRY: Record<string, ProviderAdapter> = {
   kimi: customOpenaiAdapter,
   openrouter: customOpenaiAdapter,
   qwen: customOpenaiAdapter,
+  // Kept distinct from `kimi` (not a second key row under the same provider) for the same
+  // pooling-isolation reason as deepseek_reasoning/deepseek_top above: kimi_k3 is meant to sit
+  // at tier 1 of the 'top' complexity bucket, while the plain `kimi` key sits at a fields'
+  // final fallback tier — sharing one provider bucket would pull kimi-k3 into that fallback
+  // tier too (and vice versa) whenever either is referenced.
+  kimi_k3: customOpenaiAdapter,
   custom_openai: customOpenaiAdapter,
 };
 
