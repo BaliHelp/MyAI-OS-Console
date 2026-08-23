@@ -40,6 +40,7 @@ async function run() {
     { field_key: "ocr_general_document", display_name: "CV, kontrak kerja, dokumen umum lainnya", description: "Mengekstrak data teks umum", auto_mode: true },
     { field_key: "orchestrator", display_name: "Koordinasi antar-agent dan keputusan routing", description: "Otak utama orkestrasi agent", auto_mode: true },
     { field_key: "chatbot", display_name: "Chat widget customer-facing", description: "Widget chat interaktif pelanggan", auto_mode: true },
+    { field_key: "gemini", display_name: "Gemini (Direct)", description: "Routes directly to Google Gemini for every prompt-length class, no fallback tier.", auto_mode: true },
     { field_key: "reasoning_general", display_name: "Analisis dan pengambilan keputusan kompleks", description: "Penalaran tingkat tinggi", auto_mode: true },
     { field_key: "face_liveness_scan", display_name: "reserved placeholder only", description: "Pencocokan biometrik wajah (non-aktif)", auto_mode: false }
   ];
@@ -71,7 +72,8 @@ async function run() {
     { field_key: "reasoning_general", provider: "gpt", pool_tier: 2 },
     { field_key: "chatbot", provider: "gpt", pool_tier: 1 },
     { field_key: "chatbot", provider: "claude", pool_tier: 2 },
-    { field_key: "chatbot", provider: "deepseek", pool_tier: 3 }
+    { field_key: "chatbot", provider: "deepseek", pool_tier: 3 },
+    { field_key: "gemini", provider: "gemini", pool_tier: 1 }
   ];
 
   // Clear existing assignments
