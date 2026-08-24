@@ -138,6 +138,19 @@ export default function Dashboard({ adminEmail }: DashboardProps) {
     await fetchAllData(true);
   };
 
+  const handleRenameApp = async (appId: string, name: string) => {
+    const res = await fetch(`/api/apps/${appId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to rename application");
+    }
+    await fetchAllData(true);
+  };
+
   const handleDeleteApp = async (appId: string) => {
     const res = await fetch(`/api/apps/${appId}`, { method: "DELETE" });
     if (!res.ok) {
@@ -224,6 +237,7 @@ export default function Dashboard({ adminEmail }: DashboardProps) {
                 onGenerateKey={handleGenerateKey}
                 onRevokeKey={handleRevokeKey}
                 onDeleteApp={handleDeleteApp}
+                onRenameApp={handleRenameApp}
               />
             )}
             {activeTab === 'knowledge' && (

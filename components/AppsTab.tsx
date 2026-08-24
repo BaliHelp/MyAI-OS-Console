@@ -7,22 +7,24 @@ import { useState, useMemo, FormEvent } from "react";
 // Kept in-component to avoid Next.js client/server boundary issues with lib/.
 // When adding a new provider: add adapter to lib/provider-adapters/, then add here.
 const SUPPORTED_PROVIDERS = ["gemini", "gpt", "claude", "grok", "deepseek", "deepseek_reasoning", "deepseek_top", "kimi", "kimi_k3", "openrouter", "qwen"];
-import { 
-  AppWindow, 
-  Plus, 
-  Key, 
-  Check, 
-  Copy, 
-  Trash2, 
-  ArrowLeft, 
-  ShieldAlert, 
-  ShieldCheck, 
-  Settings, 
-  Globe, 
+import {
+  AppWindow,
+  Plus,
+  Key,
+  Check,
+  Copy,
+  Trash2,
+  ArrowLeft,
+  ShieldAlert,
+  ShieldCheck,
+  Settings,
+  Globe,
   Lock,
   Clock,
   Eye,
-  Activity
+  Activity,
+  Pencil,
+  X
 } from "lucide-react";
 import { ClientApp, ApiKey, UsageLog, Language } from "@/lib/types";
 import { translations } from "@/lib/i18n";
@@ -37,13 +39,20 @@ interface AppsTabProps {
   onGenerateKey: (clientAppId: string, scope: string[], rateLimit: number | null) => Promise<{ full_key: string } & ApiKey>;
   onRevokeKey: (keyId: string) => Promise<void>;
   onDeleteApp?: (appId: string) => Promise<void>;
+  onRenameApp?: (appId: string, name: string) => Promise<void>;
 }
 
-export default function AppsTab({ apps, apiKeys, logs, lang, theme, onCreateApp, onGenerateKey, onRevokeKey, onDeleteApp }: AppsTabProps) {
+export default function AppsTab({ apps, apiKeys, logs, lang, theme, onCreateApp, onGenerateKey, onRevokeKey, onDeleteApp, onRenameApp }: AppsTabProps) {
   const t = translations[lang];
 
   // Tab State
   const [selectedApp, setSelectedApp] = useState<ClientApp | null>(null);
+
+  // Rename App (detail header)
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [editNameValue, setEditNameValue] = useState("");
+  const [renamingApp, setRenamingApp] = useState(false);
+  const [renameError, setRenameError] = useState("");
   
   // Create App Modal
   const [isAppModalOpen, setIsAppModalOpen] = useState(false);
@@ -102,6 +111,39 @@ export default function AppsTab({ apps, apiKeys, logs, lang, theme, onCreateApp,
     }
   };
 
+  const startEditingName = () => {
+    if (!selectedApp) return;
+    setEditNameValue(selectedApp.name);
+    setRenameError("");
+    setIsEditingName(true);
+  };
+
+  const cancelEditingName = () => {
+    setIsEditingName(false);
+    setRenameError("");
+  };
+
+  const handleRenameSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!selectedApp || !onRenameApp) return;
+    const trimmed = editNameValue.trim();
+    if (!trimmed) {
+      setRenameError("Nama tidak boleh kosong");
+      return;
+    }
+    setRenamingApp(true);
+    setRenameError("");
+    try {
+      await onRenameApp(selectedApp.id, trimmed);
+      setSelectedApp({ ...selectedApp, name: trimmed });
+      setIsEditingName(false);
+    } catch (err: any) {
+      setRenameError(err.message || "Gagal mengubah nama aplikasi");
+    } finally {
+      setRenamingApp(false);
+    }
+  };
+
   const handleGenerateKeySubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!selectedApp) return;
@@ -136,7 +178,7 @@ export default function AppsTab({ apps, apiKeys, logs, lang, theme, onCreateApp,
       {selectedApp ? (
         <div className="space-y-6">
           <button
-            onClick={() => { setSelectedApp(null); setGeneratedKeyResult(null); }}
+            onClick={() => { setSelectedApp(null); setGeneratedKeyResult(null); setIsEditingName(false); }}
             id="back-to-apps-btn"
             className="flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-xl border border-bento-border bg-bento-surface text-bento-text-secondary hover:text-bento-text-primary transition-all duration-150"
           >
@@ -150,17 +192,57 @@ export default function AppsTab({ apps, apiKeys, logs, lang, theme, onCreateApp,
               <div className="p-3 rounded-2xl bg-bento-accent-muted text-bento-accent">
                 <AppWindow className="h-8 w-8" />
               </div>
-              <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <h3 className="text-xl font-bold tracking-tight text-bento-text-primary" id="app-detail-name">{selectedApp.name}</h3>
-                  <span className={`px-2.5 py-0.5 text-[9px] font-extrabold rounded-full uppercase tracking-wide ${
-                    selectedApp.tier === 'internal'
-                      ? 'bg-bento-success/10 text-bento-success border border-bento-success/15'
-                      : 'bg-bento-accent/10 text-bento-accent border border-bento-accent/15'
-                  }`}>
-                    {selectedApp.tier === 'internal' ? t.tierInternal : t.tierCommunity}
-                  </span>
-                </div>
+              <div className="flex-1 min-w-0">
+                {isEditingName ? (
+                  <form onSubmit={handleRenameSubmit} className="flex items-center gap-2 mb-1">
+                    <input
+                      type="text"
+                      autoFocus
+                      required
+                      value={editNameValue}
+                      onChange={(e) => setEditNameValue(e.target.value)}
+                      className="px-3 py-1.5 text-lg font-bold rounded-lg border border-bento-accent bg-bento-surface-lighter text-bento-text-primary focus:outline-none"
+                    />
+                    <button
+                      type="submit"
+                      disabled={renamingApp}
+                      className="p-1.5 rounded-lg bg-bento-accent hover:bg-bento-accent/90 text-white disabled:opacity-50"
+                      title="Simpan nama"
+                    >
+                      <Check className="h-4 w-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={cancelEditingName}
+                      disabled={renamingApp}
+                      className="p-1.5 rounded-lg border border-bento-border text-bento-text-secondary hover:text-bento-text-primary"
+                      title="Batal"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </form>
+                ) : (
+                  <div className="flex items-center gap-2 mb-1">
+                    <h3 className="text-xl font-bold tracking-tight text-bento-text-primary" id="app-detail-name">{selectedApp.name}</h3>
+                    <span className={`px-2.5 py-0.5 text-[9px] font-extrabold rounded-full uppercase tracking-wide ${
+                      selectedApp.tier === 'internal'
+                        ? 'bg-bento-success/10 text-bento-success border border-bento-success/15'
+                        : 'bg-bento-accent/10 text-bento-accent border border-bento-accent/15'
+                    }`}>
+                      {selectedApp.tier === 'internal' ? t.tierInternal : t.tierCommunity}
+                    </span>
+                    {onRenameApp && (
+                      <button
+                        onClick={startEditingName}
+                        className="p-1.5 rounded-lg text-bento-text-secondary hover:text-bento-accent hover:bg-bento-accent-muted transition-colors"
+                        title="Ubah nama aplikasi"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
+                )}
+                {renameError && <p className="text-xs text-red-400 font-semibold mb-1">{renameError}</p>}
                 <p className="text-xs text-bento-text-secondary font-mono opacity-80">Slug: {selectedApp.slug} | ID: {selectedApp.id}</p>
               </div>
             </div>

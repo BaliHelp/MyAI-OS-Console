@@ -8,6 +8,61 @@ const projectRoot = "/Users/bayu_1/Documents/0 MyAI OS/MyAI-OS-Console";
 const dbJsonPath = path.resolve(projectRoot, "db.json");
 
 /**
+ * PATCH /api/apps/[id]
+ * Requires admin session (role === "owner").
+ * Renames a client app (gw_client_apps.name only — slug/tier/status untouched).
+ */
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const session = await getSession(req);
+  if (!session || session.role !== "owner") {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const { id: appId } = await params;
+  if (!appId) {
+    return NextResponse.json({ error: "Application ID is required" }, { status: 400 });
+  }
+
+  const { name } = await req.json();
+  if (!name || typeof name !== "string" || !name.trim()) {
+    return NextResponse.json({ error: "Name is required" }, { status: 400 });
+  }
+  const trimmedName = name.trim();
+
+  if (supabaseAdmin) {
+    const { data, error } = await supabaseAdmin
+      .from("gw_client_apps")
+      .update({ name: trimmedName })
+      .eq("id", appId)
+      .select()
+      .single();
+
+    if (error) {
+      console.error("[api/apps/patch] Error renaming application:", error.message);
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    return NextResponse.json(data);
+  } else {
+    // Local db.json fallback
+    if (fs.existsSync(dbJsonPath)) {
+      const db = JSON.parse(fs.readFileSync(dbJsonPath, "utf8"));
+      const app = (db.clientApps ?? []).find((a: any) => a.id === appId);
+      if (!app) {
+        return NextResponse.json({ error: "Application not found" }, { status: 404 });
+      }
+      app.name = trimmedName;
+      fs.writeFileSync(dbJsonPath, JSON.stringify(db, null, 2), "utf8");
+      return NextResponse.json(app);
+    }
+    return NextResponse.json({ error: "Database unavailable" }, { status: 503 });
+  }
+}
+
+/**
  * DELETE /api/apps/[id]
  * Requires admin session (role === "owner").
  * Safely removes a client app:

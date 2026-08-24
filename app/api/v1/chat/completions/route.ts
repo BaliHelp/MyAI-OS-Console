@@ -328,6 +328,26 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // 4b-bis. App-specific field spec — persona milik APLIKASI, bukan field bersama.
+    // Diprioritaskan di atas spec global: mis. content_generation untuk Indonesian Visas
+    // punya persona visa sendiri; aplikasi lain memakai spec global yang netral.
+    if (supabaseAdmin) {
+      try {
+        const { data: appSpec } = await supabaseAdmin
+          .from("gw_app_field_specs")
+          .select("system_prompt, output_schema")
+          .eq("field_key", fieldKey)
+          .eq("client_app_id", keyData.client_app_id)
+          .maybeSingle();
+
+        if (appSpec) {
+          fieldSpec = appSpec;
+        }
+      } catch (err) {
+        console.warn("[gateway] Database error fetching app-specific field spec:", err);
+      }
+    }
+
     let resolvedSystemPrompt = "";
     if (fieldSpec) {
       const rawPrompt = fieldSpec.system_prompt || "Kamu adalah asisten AI untuk [nama aplikasi pemanggil]. Jawab dengan jelas dan profesional.";
@@ -401,12 +421,17 @@ ${resolvedSystemPrompt}`;
 
     // 4c-ter. Enforce Natural Human Tone & prohibit bold asterisks (**) for all chatbot fields
     const isChatbotField = fieldKey.startsWith("chatbot") || fieldKey === "chatbot" || fieldKey === "chatbot_general" || fieldKey === "chatbot_myai_home" || fieldKey === "bogani_ai";
+    // Aturan visa (butir 4 di blok gaya bahasa) HANYA untuk aplikasi Indonesian Visas.
+    const IS_VISAS_APP = keyData.client_app_id === 'd544c3f5-89bd-4983-8387-6d85d954050f';
     if (isChatbotField) {
       resolvedSystemPrompt += `\n\n--- ATURAN GAYA BAHASA PENULISAN (HUMAN NATURAL STYLE) ---
 1. Jawablah dengan gaya percakapan customer service / asisten manusia yang ramah, santai tapi profesional, singkat, padat, dan solutif.
 2. DILARANG keras menggunakan simbol bold asteris berlebihan seperti **kata** atau **kalimat**. Tulis dengan teks biasa (plain text) seperti pesan WhatsApp atau chat manusia asli.
-3. Hindari gaya penulisan template AI yang kaku, panjang lebar, atau berulang-ulang. Langsung berikan poin utama atau jawaban yang jelas.
+3. Hindari gaya penulisan template AI yang kaku, panjang lebar, atau berulang-ulang. Langsung berikan poin utama atau jawaban yang jelas.`;
+      if (IS_VISAS_APP) {
+        resolvedSystemPrompt += `
 4. KHUSUS INFORMASI VISA & HARGA: Kamu WAJIB SELALU 100% mengacu pada data terperinci dari 'Dokumen Resmi Visa Database Admin Dashboard' di dalam basis pengetahuan (Knowledge Base) kami. DILARANG mengarang harga atau aturan visa sendiri.`;
+      }
     }
 
     // Append core knowledge base context (skipped for tools-mode — see the fetch above for why)
