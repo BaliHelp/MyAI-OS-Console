@@ -3,6 +3,8 @@ import { GoogleGenAI } from "@google/genai";
 import { supabaseAdmin } from "@/lib/supabase";
 import { decryptKey } from "@/lib/crypto";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
+import { embedText } from "@/lib/embedding-adapters/gemini-embedding";
+import { GEMINI_PRIMARY_MODEL } from "@/lib/provider-adapters/gemini";
 
 export async function POST(req: NextRequest) {
   const ip = req.headers.get("x-forwarded-for")?.split(",")[0] ?? "unknown";
@@ -27,8 +29,7 @@ export async function POST(req: NextRequest) {
     let profileContent = "";
 
     if (supabaseAdmin) {
-      const [{ data: docs }, { data: profile }, { data: apps }] = await Promise.all([
-        supabaseAdmin.from("gw_knowledge_documents").select("title, content, client_app_id"),
+      const [{ data: profile }, { data: apps }] = await Promise.all([
         supabaseAdmin.from("gw_business_profile").select("content").limit(1).single(),
         supabaseAdmin.from("gw_client_apps").select("id, name"),
       ]);
@@ -37,8 +38,44 @@ export async function POST(req: NextRequest) {
       const appNameById: Record<string, string> = {};
       apps?.forEach((a: { id: string; name: string }) => { appNameById[a.id] = a.name; });
 
-      docsContext = (docs ?? [])
-        .map((d: { title: string; content: string; client_app_id: string | null }) => {
+      // Semantic retrieval: same approach as app/api/v1/chat/completions/route.ts — embed the
+      // admin's question and fetch only the top-K relevant documents instead of the entire
+      // knowledge base. This is the admin-only helper (no single calling app to scope by), so it
+      // uses match_knowledge_documents_all (unscoped) rather than the per-app RPC. Falls back to
+      // fetch-all when nothing is embedded yet or the embedding call fails, so knowledge never
+      // silently disappears because of an embedding hiccup.
+      type DocRow = { title: string; content: string; client_app_id: string | null };
+      let docs: DocRow[] = [];
+      let semanticSearchReady = false;
+
+      const { count: embeddedCount } = await supabaseAdmin
+        .from("gw_knowledge_documents")
+        .select("id", { count: "exact", head: true })
+        .not("embedding", "is", null);
+
+      if (embeddedCount && embeddedCount > 0) {
+        const queryEmbedding = await embedText(prompt).catch(() => null);
+        if (queryEmbedding) {
+          const { data: matches, error: matchError } = await supabaseAdmin.rpc("match_knowledge_documents_all", {
+            query_embedding: queryEmbedding,
+            match_count: 8,
+          });
+          if (!matchError) {
+            docs = matches || [];
+            semanticSearchReady = true;
+          }
+        }
+      }
+
+      if (!semanticSearchReady) {
+        const { data: allDocs } = await supabaseAdmin
+          .from("gw_knowledge_documents")
+          .select("title, content, client_app_id");
+        docs = allDocs || [];
+      }
+
+      docsContext = docs
+        .map((d) => {
           const scope = d.client_app_id
             ? `Scope: Product ${appNameById[d.client_app_id] ?? "Unknown"}`
             : "Scope: Global/Shared";
@@ -103,9 +140,12 @@ Answer the admin's question clearly, accurately, and professionally. Default to 
     }
 
     // ── Real Gemini API call ──────────────────────────────────────────────
+    // gemini-2.0-flash (this endpoint's model until 2026-08-26) was shut down by Google on
+    // 2026-06-01 — this call was silently failing every request. Swapped to the same default the
+    // rest of this gateway uses (lib/provider-adapters/gemini.ts).
     const ai = new GoogleGenAI({ apiKey });
     const result = await ai.models.generateContent({
-      model: "gemini-2.0-flash",
+      model: GEMINI_PRIMARY_MODEL,
       contents: prompt,
       config: { systemInstruction: systemPrompt, temperature: 0.7 },
     });

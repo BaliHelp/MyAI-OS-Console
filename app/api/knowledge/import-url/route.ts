@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/supabase";
+import { generateAndAttachEmbedding } from "@/lib/knowledge";
 import fs from "fs";
 import path from "path";
 import crypto from "crypto";
@@ -197,6 +198,7 @@ export async function POST(req: NextRequest) {
         .from("gw_knowledge_documents")
         .insert(newDoc);
       if (error) throw new Error(error.message);
+      generateAndAttachEmbedding(recordId, newDoc.content).catch(() => {});
     } else {
       // Local fallback
       if (fs.existsSync(dbJsonPath)) {

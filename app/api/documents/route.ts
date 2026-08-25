@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
+import { generateAndAttachEmbedding } from "@/lib/knowledge";
 
 export async function GET() {
   if (!supabaseAdmin) {
@@ -31,5 +32,6 @@ export async function POST(req: NextRequest) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  generateAndAttachEmbedding(data.id, content).catch(() => {});
   return NextResponse.json(data, { status: 201 });
 }

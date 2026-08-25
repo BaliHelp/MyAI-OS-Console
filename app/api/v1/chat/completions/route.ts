@@ -4,6 +4,7 @@ import { decryptKey, hashApiKey } from "@/lib/crypto";
 import { parseUploadedFile, type ParsedFileResult } from "@/lib/file-parser";
 import { saveToDataCenter } from "@/lib/data-center";
 import { classifyComplexity } from "@/lib/classify-complexity";
+import { embedText } from "@/lib/embedding-adapters/gemini-embedding";
 import fs from "fs";
 import path from "path";
 
@@ -298,23 +299,58 @@ export async function POST(req: NextRequest) {
     // ~115KB / ~30k tokens of every single request, which is what pushed tool-calling requests
     // past OpenAI's per-minute token limit. Non-tools requests are completely unaffected.
     if (!hasTools) {
-      const [{ data: docs }, { data: profile }] = await Promise.all([
-        supabaseAdmin
-          .from("gw_knowledge_documents")
-          .select("title, content, client_app_id"),
-        supabaseAdmin
-          .from("gw_business_profile")
-          .select("content")
-          .limit(1)
-          .single()
-      ]);
-
+      const { data: profile } = await supabaseAdmin
+        .from("gw_business_profile")
+        .select("content")
+        .limit(1)
+        .single();
       profileContent = profile?.content || "";
 
-      // Filter docs scoped to either this client_app_id or global (null)
-      const filteredDocs = (docs || []).filter(
-        (d) => !d.client_app_id || d.client_app_id === keyData.client_app_id
-      );
+      // Semantic retrieval: embed the prompt and fetch only the top-K relevant documents
+      // instead of every row — this used to dump the ENTIRE knowledge base into every request
+      // (~115KB/~30k tokens for one app, which is what pushed tools-mode requests past OpenAI's
+      // per-minute token limit and forced the `!hasTools` guard above in the first place).
+      //
+      // `embeddedCount` decides whether to trust semantic search at all: if nothing in the
+      // knowledge base has an embedding yet (fresh deploy, backfill not run), match_knowledge_
+      // documents would legitimately return zero rows for every prompt — indistinguishable from
+      // "no relevant documents" unless we check for that case up front. Only once there's an
+      // embedded corpus to search do we trust an empty result as a real "nothing relevant"
+      // answer rather than falling back.
+      let filteredDocs: Array<{ title: string; content: string }> = [];
+      let semanticSearchReady = false;
+
+      const { count: embeddedCount } = await supabaseAdmin
+        .from("gw_knowledge_documents")
+        .select("id", { count: "exact", head: true })
+        .not("embedding", "is", null);
+
+      if (embeddedCount && embeddedCount > 0) {
+        const queryEmbedding = await embedText(prompt).catch(() => null);
+        if (queryEmbedding) {
+          const { data: matches, error: matchError } = await supabaseAdmin.rpc("match_knowledge_documents", {
+            query_embedding: queryEmbedding,
+            match_count: 8,
+            filter_client_app_id: keyData.client_app_id,
+          });
+          if (!matchError) {
+            filteredDocs = matches || [];
+            semanticSearchReady = true;
+          }
+        }
+      }
+
+      // Fallback: original fetch-all + in-memory filter, used when nothing is embedded yet or
+      // the embedding/RPC call itself failed — knowledge should never silently disappear from a
+      // request just because the embedding path had a hiccup.
+      if (!semanticSearchReady) {
+        const { data: docs } = await supabaseAdmin
+          .from("gw_knowledge_documents")
+          .select("title, content, client_app_id");
+        filteredDocs = (docs || []).filter(
+          (d) => !d.client_app_id || d.client_app_id === keyData.client_app_id
+        );
+      }
 
       knowledgeContext = filteredDocs
         .map((d) => `Document: "${d.title}"\nContent: ${d.content}`)
