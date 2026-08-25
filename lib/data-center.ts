@@ -1,4 +1,5 @@
 import { supabaseAdmin } from "./supabase";
+import { embedText } from "./embedding-adapters/gemini-embedding";
 import sharp from "sharp";
 import crypto from "crypto";
 import fs from "fs";
@@ -132,6 +133,20 @@ export async function saveToDataCenter(input: DataCenterRecordInput): Promise<st
       console.error("[data-center] DB Insert error:", error.message);
       return null;
     }
+
+    // Fire-and-forget, sama seperti generateAndAttachEmbedding di lib/knowledge.ts — kegagalan
+    // embedding tidak boleh menggagalkan penyimpanan record utamanya. Hanya di-embed kalau ada
+    // raw_text (mis. hasil OCR); record tanpa teks (upload murni gambar tanpa ekstraksi) tidak
+    // ada apa pun yang bisa dicari secara semantik.
+    if (input.raw_text) {
+      embedText(input.raw_text)
+        .then((embedding) => {
+          if (!embedding || !supabaseAdmin) return;
+          return supabaseAdmin.from("gw_data_center").update({ embedding }).eq("id", recordId);
+        })
+        .catch((err) => console.warn(`[data-center] Gagal membuat embedding untuk record ${recordId}:`, err));
+    }
+
     return data?.id || recordId;
   } else {
     // Local JSON DB fallback
