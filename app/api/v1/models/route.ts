@@ -42,6 +42,23 @@ const PROVIDER_DISPLAY_NAME: Record<string, string> = {
   // product — a bare "OpenRouter" name told a caller nothing about which underlying model they'd
   // actually get. Falls through to the key's own label below (e.g. "OpenRouter (Qwen 2.5 72B)"),
   // same reasoning as the "others"/custom_openai fallback further down.
+
+  // Low/Medium/Top tier variants (2026-08-26, see lib/provider-adapters/index.ts) — same display
+  // name as their parent provider, exactly like deepseek_reasoning/deepseek_top above; the
+  // `model` field is what actually distinguishes the tier to a caller.
+  gemini_medium: "Gemini",
+  gemini_top: "Gemini",
+  deepseek_v4_flash: "DeepSeek",
+  deepseek_v4_pro: "DeepSeek",
+  qwen_low: "Qwen",
+  qwen_medium: "Qwen",
+  kimi_k2_5: "Moonshot Kimi",
+  claude_low: "Claude",
+  claude_top: "Claude",
+  gpt_medium: "GPT",
+  gpt_top: "GPT",
+  grok_low: "Grok",
+  grok_medium: "Grok",
 };
 
 // PUBLIC_PROVIDER_NAME (imported above) is used only for the top-level `models` summary — it
@@ -61,54 +78,181 @@ interface ModelDetail {
   context_window?: string;
   pricing_per_million_tokens?: string;
   notes?: string;
+  /** How much internal "thinking"/reasoning this exact model does before answering — a fact
+   * about the model itself (thinking always-on, toggleable, or absent), not a persona. */
+  reasoning_level: "high" | "medium" | "low" | "none";
+  /** Short, curated use-case tags — filterable/sortable by callers, spec_label below renders
+   * them into the human-readable string. */
+  recommended_for: string[];
 }
 const MODEL_DETAILS: Record<string, ModelDetail> = {
   "claude-sonnet-4-5": {
     description: "Anthropic's flagship Sonnet model — optimized for agentic workflows, coding, and multi-step tool orchestration. State-of-the-art on coding benchmarks (SWE-bench Verified).",
     context_window: "1M tokens in, 64K tokens out",
     pricing_per_million_tokens: "$3 input / $15 output",
+    reasoning_level: "medium",
+    recommended_for: ["coding", "agentic", "tool_use"],
   },
   "gpt-4o-mini": {
     description: "OpenAI's fast, affordable multimodal model for focused tasks — classification, extraction, translation, structured output.",
     context_window: "128K tokens in, 16K tokens out",
     pricing_per_million_tokens: "$0.15 input / $0.60 output",
     notes: "The only provider this gateway currently has real tool-calling (function calling) support for — see the tools-lock in chat/completions routing.",
+    reasoning_level: "low",
+    recommended_for: ["text_only", "tool_calling", "high_volume_cheap"],
   },
   "gemini-3.5-flash-lite": {
     description: "Google's low-latency, cost-effective multimodal model for high-throughput agentic workflows, document processing, and classification. Accepts text, image, speech, and video input.",
     context_window: "1M tokens in, 64K tokens out",
     pricing_per_million_tokens: "$0.30 input / $2.50 output",
+    reasoning_level: "low",
+    recommended_for: ["text_only", "vision_input", "high_volume_cheap"],
   },
   "grok-4.5": {
     description: "xAI's model with configurable internal reasoning effort (low/medium/high) applied before answering. Accepts text, images, and PDF files as input.",
     context_window: "500K tokens (pricing doubles beyond 200K)",
     pricing_per_million_tokens: "$2.00 input / $6.00 output (below 200K context)",
+    reasoning_level: "high",
+    recommended_for: ["reasoning"],
   },
   "deepseek-chat": {
     description: "General-purpose (non-reasoning) DeepSeek chat model.",
     notes: "Legacy model ID — DeepSeek's current official pricing/docs page (checked 2026-08-24) no longer lists 'deepseek-chat', only deepseek-v4-flash/deepseek-v4-pro/deepseek-v4-flash-vision-exp. The alias is still live and functional as verified in this gateway, but treat it as best-effort, not guaranteed long-term — migrating to the v4 model IDs is on the radar.",
+    reasoning_level: "low",
+    recommended_for: ["text_only", "high_volume_cheap"],
   },
   "deepseek-reasoner": {
     description: "Reasoning-specialized DeepSeek model — spends part of its token budget on internal chain-of-thought (a separate reasoning_content field) before emitting the final answer.",
     notes: "Same legacy-ID caveat as deepseek-chat (see above). This gateway raises max_tokens to 8000 by default for this model specifically, and treats an empty answer at the token ceiling as a retriable failure rather than a false success — see lib/provider-adapters/deepseek.ts.",
+    reasoning_level: "high",
+    recommended_for: ["reasoning"],
   },
   "kimi-k3": {
     description: "Moonshot AI's flagship model — 2.8T total parameters, launched 2026-07-16. This is a reasoning model: thinking mode is permanently on (cannot be disabled), depth controlled via reasoning_effort (low/high/max, default max). Streaming responses separate the thinking trace (reasoning_content) from the final answer (content).",
     context_window: "1M tokens",
     pricing_per_million_tokens: "$3 input / $15 output ($0.30/M on cache hits)",
     notes: "This gateway calls it at the default reasoning_effort (max) — no gateway parameter to lower it yet. See also deepseek-reasoner above for the same reasoning_content-vs-content split pattern.",
+    reasoning_level: "high",
+    recommended_for: ["reasoning"],
   },
   "kimi-k2.6": {
-    description: "Moonshot AI's value-tier chat model — cheaper than K3, general-purpose (not a reasoning model).",
+    description: "Moonshot AI's value-tier chat model — cheaper than K3, general-purpose, supports both thinking and non-thinking modes (toggleable, unlike K3's always-on reasoning).",
     pricing_per_million_tokens: "$0.95 input / $4.00 output",
+    notes: "Corrected 2026-08-26 — previously described here as \"not a reasoning model\"; Moonshot's own docs (platform.kimi.ai) confirm K2.6 supports a thinking-mode toggle.",
+    reasoning_level: "medium",
+    recommended_for: ["reasoning", "text_only"],
   },
   "qwen3.8-max": {
     description: "Alibaba's flagship Qwen model — 2.4T total parameters (~95B active, Sparse Mixture-of-Experts), released 2026-08-03. Accepts text, image, and video input. Hybrid reasoning model: thinking mode is toggleable per-request (enable_thinking) with a thinking_budget cap on reasoning tokens, unlike Kimi K3's always-on reasoning.",
     context_window: "up to 1M tokens in (991K max), 131K tokens out",
     notes: "This gateway does not currently set enable_thinking explicitly, so behavior follows Alibaba's default for this model rather than a gateway-chosen setting.",
+    reasoning_level: "medium",
+    recommended_for: ["reasoning", "vision_input"],
   },
   "qwen/qwen-2.5-72b-instruct": {
     description: "Qwen 2.5 72B Instruct, accessed via OpenRouter (a third-party model aggregator) rather than a direct Alibaba connection — kept as a fallback option, not this gateway's primary route to Qwen.",
+    reasoning_level: "low",
+    recommended_for: ["text_only", "fallback"],
+  },
+
+  // ── Low/Medium/Top tier additions (2026-08-26) — additive only, see lib/provider-adapters/
+  // index.ts for the identity->model wiring. Pricing/specs re-verified live against each
+  // vendor's own docs on 2026-08-25/26.
+  "kimi-k2.5": {
+    description: "Moonshot AI's cheapest current multimodal chat model — text, image, and video input, thinking and non-thinking modes, dialogue and agent tasks.",
+    context_window: "256K tokens",
+    pricing_per_million_tokens: "$0.60 input (cache miss) / $3.00 output ($0.10/M on cache hits)",
+    reasoning_level: "medium",
+    recommended_for: ["reasoning", "text_only", "vision_input", "high_volume_cheap"],
+  },
+  "deepseek-v4-flash": {
+    description: "DeepSeek's current official Flash model (V4-Flash-0731) — 1M context, supports both thinking (default) and non-thinking modes.",
+    context_window: "1M tokens in, up to 384K tokens out",
+    pricing_per_million_tokens: "$0.44 input (cache miss, peak) / $1.32 output (peak) — roughly 2x cheaper off-peak (01:00-04:00 & 06:00-10:00 UTC, Mon-Fri)",
+    reasoning_level: "medium",
+    recommended_for: ["reasoning", "text_only"],
+  },
+  "deepseek-v4-pro": {
+    description: "DeepSeek's current official Pro model (V4-Pro-0813) — larger MoE flagship, same feature set as V4-Flash (JSON output, tool calls, 1M context) at a higher price/quality point.",
+    context_window: "1M tokens in, up to 384K tokens out",
+    pricing_per_million_tokens: "$1.32 input (cache miss, peak) / $3.96 output (peak) — roughly 2x cheaper off-peak",
+    reasoning_level: "high",
+    recommended_for: ["reasoning"],
+  },
+  "qwen3.5-flash": {
+    description: "Qwen's cheapest current native vision-language Flash model.",
+    context_window: "1M tokens in, 65.5K tokens out",
+    pricing_per_million_tokens: "$0.10 input / $0.40 output",
+    reasoning_level: "low",
+    recommended_for: ["text_only", "vision_input", "high_volume_cheap"],
+  },
+  "qwen3.6-flash": {
+    description: "Qwen's native vision-language Flash model, one generation newer than 3.5-Flash.",
+    context_window: "1M tokens in, 65.5K tokens out",
+    pricing_per_million_tokens: "$0.25-1.00 input / $1.50-4.00 output",
+    reasoning_level: "medium",
+    recommended_for: ["text_only", "vision_input"],
+  },
+  "claude-haiku-4-5-20251001": {
+    description: "Anthropic's fastest model with near-frontier intelligence — the cheapest current Claude tier.",
+    context_window: "200K tokens in, 64K tokens out",
+    pricing_per_million_tokens: "$1 input / $5 output",
+    notes: "Supports extended thinking, but it is not the default effort mode for this model (unlike Opus/Sonnet/Fable, which default to adaptive-high).",
+    reasoning_level: "low",
+    recommended_for: ["text_only", "vision_input", "tool_use", "high_volume_cheap"],
+  },
+  "claude-opus-5": {
+    description: "Anthropic's top-tier model for complex agentic coding and enterprise work, adaptive thinking with default effort 'high'.",
+    context_window: "1M tokens in, 128K tokens out",
+    pricing_per_million_tokens: "$5 input / $25 output",
+    reasoning_level: "high",
+    recommended_for: ["reasoning", "coding", "agentic"],
+  },
+  "gpt-4.1": {
+    description: "OpenAI's mid-tier GPT-4.1 model — general-purpose, multimodal.",
+    pricing_per_million_tokens: "$2.00 input / $8.00 output",
+    reasoning_level: "medium",
+    recommended_for: ["text_only", "vision_input"],
+  },
+  "gpt-5.1": {
+    description: "OpenAI's unified reasoning-capable flagship — reasoning effort is a request parameter rather than a separate o-series model line, so it uses the same Chat Completions request shape as every other GPT model this gateway calls.",
+    pricing_per_million_tokens: "$1.25 input / $10.00 output",
+    notes: "This gateway's tools-mode still pins the actual model to gpt-4o regardless of tier (see lib/provider-adapters/gpt.ts) — the tier distinction here only applies to non-tools calls.",
+    reasoning_level: "high",
+    recommended_for: ["reasoning", "tool_calling"],
+  },
+  "grok-build-0.1": {
+    description: "xAI's cheapest current Grok model.",
+    context_window: "256K tokens (pricing doubles beyond 200K)",
+    pricing_per_million_tokens: "$1.00 input / $2.00 output (below 200K context)",
+    reasoning_level: "low",
+    recommended_for: ["text_only", "high_volume_cheap"],
+  },
+  "grok-4.3": {
+    description: "xAI's mid-tier Grok model — cheaper than Grok 4.5, larger context window.",
+    context_window: "1M tokens (pricing doubles beyond 200K)",
+    pricing_per_million_tokens: "$1.25 input / $2.50 output (below 200K context)",
+    reasoning_level: "medium",
+    recommended_for: ["text_only", "vision_input"],
+  },
+  "gemini-2.5-flash": {
+    description: "Google's price-performance Flash model, one generation before the gateway's default (3.5 Flash-Lite).",
+    pricing_per_million_tokens: "$0.30 input (text/image/video) / $2.50 output ($1.00/M for audio input)",
+    reasoning_level: "medium",
+    recommended_for: ["text_only", "vision_input"],
+  },
+  "gemini-3.1-pro-preview": {
+    description: "Google's top-tier Gemini model — advanced reasoning and complex problem-solving.",
+    pricing_per_million_tokens: "$2.00 input / $12.00 output (≤200K context; $4.00/$18.00 beyond)",
+    reasoning_level: "high",
+    recommended_for: ["reasoning", "coding"],
+  },
+  "gemini-3.1-flash-lite-image": {
+    description: "Google's cheapest current dedicated image-generation model — text-to-image, served via this gateway's separate POST /v1/images/generations endpoint (not /v1/chat/completions).",
+    pricing_per_million_tokens: "$0.0336 per 1K-resolution image",
+    notes: "Requires provider_scope 'gemini_image' — a separate grant from Gemini text access. See lib/image-adapters/gemini-image.ts.",
+    reasoning_level: "none",
+    recommended_for: ["image_generation", "cheapest_option"],
   },
 };
 
@@ -179,7 +323,7 @@ export async function GET() {
   // to the provider and parses `tool_calls` back out; every other adapter silently ignores
   // `tools` even though several vendors (Claude, Kimi) support it natively. Single source of
   // truth so `/api/v1/models` can never claim tool support this gateway doesn't actually honor.
-  const TOOLS_CAPABLE_PROVIDERS = new Set(["gpt"]);
+  const TOOLS_CAPABLE_PROVIDERS = new Set(["gpt", "gpt_medium", "gpt_top"]);
 
   // ── Top-level flat summary: "what's live" ──────────────────────────────
   const seen = new Set<string>();
@@ -187,6 +331,7 @@ export async function GET() {
     name: string; provider: string; model: string;
     description?: string; context_window?: string; pricing_per_million_tokens?: string;
     supports_vision: boolean; supports_tools: boolean; notes?: string;
+    reasoning_level: string; recommended_for: string[]; spec_label: string;
   }> = [];
   for (const [provider, candidates] of candidatesByProvider) {
     const publicProvider = PUBLIC_PROVIDER_NAME[provider] || provider;
@@ -195,6 +340,9 @@ export async function GET() {
       if (seen.has(dedupeKey)) continue;
       seen.add(dedupeKey);
       const detail = MODEL_DETAILS[c.model];
+      const reasoningLevel = detail?.reasoning_level ?? "none";
+      const recommendedFor = detail?.recommended_for ?? [];
+      const reasoningLabel = reasoningLevel === "none" ? "None" : reasoningLevel[0].toUpperCase() + reasoningLevel.slice(1);
       models.push({
         name: c.name,
         provider: publicProvider,
@@ -205,8 +353,38 @@ export async function GET() {
         supports_vision: PROVIDER_REGISTRY[provider]?.supportsVision ?? false,
         supports_tools: TOOLS_CAPABLE_PROVIDERS.has(provider),
         notes: detail?.notes,
+        reasoning_level: reasoningLevel,
+        recommended_for: recommendedFor,
+        spec_label: recommendedFor.length > 0
+          ? `${c.name} (${reasoningLabel}) — ${recommendedFor.join(", ")}`
+          : `${c.name} (${reasoningLabel})`,
       });
     }
+  }
+
+  // ── Synthetic Gemini Image Generator entry ──────────────────────────────
+  // gemini-3.1-flash-lite-image doesn't go through gw_provider_keys at all — it reuses the same
+  // shared Gemini key pool as the 'gemini' text provider (see lib/image-adapters/gemini-image.ts),
+  // so it never appears in candidatesByProvider above. Surface it here, but only when Gemini
+  // actually has a live key — same "only show what's really usable right now" philosophy as the
+  // rest of this endpoint — served via POST /v1/images/generations, not /v1/chat/completions.
+  if ((candidatesByProvider.get("gemini") || []).length > 0) {
+    const imageModel = "gemini-3.1-flash-lite-image";
+    const detail = MODEL_DETAILS[imageModel];
+    const recommendedFor = detail?.recommended_for ?? [];
+    models.push({
+      name: "Gemini",
+      provider: "gemini",
+      model: imageModel,
+      description: detail?.description,
+      pricing_per_million_tokens: detail?.pricing_per_million_tokens,
+      supports_vision: false,
+      supports_tools: false,
+      notes: detail?.notes,
+      reasoning_level: "none",
+      recommended_for: recommendedFor,
+      spec_label: `Gemini 3.1 Flash Lite Image (None) — ${recommendedFor.join(", ")}`,
+    });
   }
 
   // ── Per-field tier structure: "how a request gets routed" ─────────────

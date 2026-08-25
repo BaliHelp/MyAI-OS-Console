@@ -34,7 +34,7 @@ export default function TermsPage() {
           <section>
             <h2 className="text-base font-bold text-white mb-3">1. Definisi</h2>
             <p>
-              "MyAI OS Console" (selanjutnya disebut "Konsol") adalah panel administrasi internal yang dirancang untuk mengelola API gateway,
+              &quot;MyAI OS Console&quot; (selanjutnya disebut &quot;Konsol&quot;) adalah panel administrasi internal yang dirancang untuk mengelola API gateway,
               konfigurasi AI, basis pengetahuan, dan data operasional ekosistem produk MyAPX,
               termasuk namun tidak terbatas pada: Indonesian Visas, Tropic Tech, dan produk lainnya di bawah naungan MyAPX.
             </p>
@@ -62,7 +62,7 @@ export default function TermsPage() {
           <section>
             <h2 className="text-base font-bold text-white mb-3">4. Batasan Layanan</h2>
             <p>
-              Konsol ini disediakan "sebagaimana adanya" (as-is) untuk keperluan internal. Pemilik ekosistem tidak memberikan
+              Konsol ini disediakan &quot;sebagaimana adanya&quot; (as-is) untuk keperluan internal. Pemilik ekosistem tidak memberikan
               jaminan atas ketersediaan, akurasi, atau kesesuaian untuk tujuan tertentu di luar lingkup yang ditetapkan.
             </p>
           </section>

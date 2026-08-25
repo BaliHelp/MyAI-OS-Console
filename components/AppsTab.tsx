@@ -6,7 +6,17 @@ import { useState, useMemo, FormEvent } from "react";
 // This is the single source of truth for supported providers in the UI.
 // Kept in-component to avoid Next.js client/server boundary issues with lib/.
 // When adding a new provider: add adapter to lib/provider-adapters/, then add here.
-const SUPPORTED_PROVIDERS = ["gemini", "gpt", "claude", "grok", "deepseek", "deepseek_reasoning", "deepseek_top", "kimi", "kimi_k3", "openrouter", "qwen"];
+// gemini_image is image-only (no text adapter) — served via POST /v1/images/generations, not
+// PROVIDER_REGISTRY — but still listed here so admins can grant/revoke that scope per app.
+const SUPPORTED_PROVIDERS = [
+  "gemini", "gpt", "claude", "grok", "deepseek", "deepseek_reasoning", "deepseek_top",
+  "kimi", "kimi_k3", "openrouter", "qwen",
+  // Low/Medium/Top tier variants (2026-08-26)
+  "gemini_medium", "gemini_top", "deepseek_v4_flash", "deepseek_v4_pro",
+  "qwen_low", "qwen_medium", "kimi_k2_5", "claude_low", "claude_top",
+  "gpt_medium", "gpt_top", "grok_low", "grok_medium",
+  "gemini_image",
+];
 import {
   AppWindow,
   Plus,

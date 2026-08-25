@@ -15,6 +15,13 @@ const PUBLIC_PATHS = [
   "/api/auth/forgot-password",
   "/api/v1/chat/completions",
   "/api/v1/models",
+  // Does its own Bearer-token auth (gateway API key, not a dashboard session) — same reasoning
+  // as /api/v1/chat/completions above, otherwise the session-cookie check below would 401 every
+  // external caller before the route's own auth ever runs.
+  "/api/v1/images/generations",
+  // Human-readable wrapper around the public /api/v1/models JSON — same "no gateway key or
+  // dashboard login needed" philosophy as that endpoint, just rendered for people instead of code.
+  "/models",
   // Vercel Cron invokes these via GET with no session cookie — gated internally by
   // Authorization: Bearer $CRON_SECRET instead (see app/api/cron/sync-knowledge/route.ts).
   "/api/cron",

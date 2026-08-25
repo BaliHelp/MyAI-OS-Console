@@ -62,12 +62,18 @@ export default function Dashboard({ adminEmail }: DashboardProps) {
     };
   }, []);
 
-  // Restore theme/lang from localStorage
+  // Restore theme/lang from localStorage. Kept as an effect (not a lazy useState initializer)
+  // deliberately — this needs to run client-only, after the SSR-rendered default has already
+  // matched on both server and client, to avoid a hydration mismatch. setState calls deferred
+  // via queueMicrotask so the effect body itself never synchronously calls setState —
+  // react-hooks/set-state-in-effect.
   useEffect(() => {
     const savedTheme = localStorage.getItem("myai_theme") as 'dark' | 'light';
-    if (savedTheme) setTheme(savedTheme);
     const savedLang = localStorage.getItem("myai_lang") as Language;
-    if (savedLang) setLang(savedLang);
+    queueMicrotask(() => {
+      if (savedTheme) setTheme(savedTheme);
+      if (savedLang) setLang(savedLang);
+    });
   }, []);
 
   useEffect(() => {
@@ -106,7 +112,9 @@ export default function Dashboard({ adminEmail }: DashboardProps) {
     }
   }, []);
 
-  useEffect(() => { fetchAllData(); }, [fetchAllData]);
+  // Deferred via queueMicrotask so the effect body itself never synchronously calls setState
+  // (fetchAllData sets loading state before its first await) — react-hooks/set-state-in-effect.
+  useEffect(() => { queueMicrotask(() => { fetchAllData(); }); }, [fetchAllData]);
 
   // --- Mutators ---
 

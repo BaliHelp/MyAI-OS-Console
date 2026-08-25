@@ -59,7 +59,9 @@ export default function AuditLogTab({ lang, theme }: AuditLogTabProps) {
     }
   }, [filterAction]);
 
-  useEffect(() => { fetchLogs(); }, [fetchLogs]);
+  // Deferred via queueMicrotask so the effect body itself never synchronously calls setState
+  // (fetchLogs sets loading state before its first await) — react-hooks/set-state-in-effect.
+  useEffect(() => { queueMicrotask(() => { fetchLogs(); }); }, [fetchLogs]);
 
   const formatTime = (iso: string) => {
     const d = new Date(iso);

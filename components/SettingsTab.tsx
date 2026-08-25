@@ -227,8 +227,11 @@ export default function SettingsTab({ lang, setLang, theme, setTheme, adminEmail
     }
   };
 
+  // Deferred via queueMicrotask so the effect body itself never synchronously calls setState
+  // (fetchProviderKeys sets loading state before its first await) —
+  // react-hooks/set-state-in-effect.
   useEffect(() => {
-    fetchProviderKeys();
+    queueMicrotask(() => { fetchProviderKeys(); });
   }, []);
 
   const handleSaveProfile = (e: FormEvent) => {
@@ -543,16 +546,29 @@ export default function SettingsTab({ lang, setLang, theme, setTheme, adminEmail
                       className="w-full px-3 py-2 text-xs rounded-lg border border-bento-border bg-bento-surface text-bento-text-primary focus:outline-none"
                     >
                       <option value="gemini">Google Gemini (Free Tier: OCR, Scan Wajah, DLL)</option>
+                      <option value="gemini_medium">Gemini — Tier Medium (2.5 Flash)</option>
+                      <option value="gemini_top">Gemini — Tier Top (3.1 Pro Preview)</option>
                       <option value="claude">Anthropic Claude (Reasoning & Chat Widget - Cadangan)</option>
+                      <option value="claude_low">Claude — Tier Low (Haiku 4.5)</option>
+                      <option value="claude_top">Claude — Tier Top (Opus 5)</option>
                       <option value="gpt">OpenAI GPT (Reasoning & Chat Widget)</option>
+                      <option value="gpt_medium">GPT — Tier Medium (4.1)</option>
+                      <option value="gpt_top">GPT — Tier Top (5.1)</option>
                       <option value="grok">x.ai Grok (Technical Team: Grok-4.5 & Imagine)</option>
+                      <option value="grok_low">Grok — Tier Low (Build 0.1)</option>
+                      <option value="grok_medium">Grok — Tier Medium (4.3)</option>
                       <option value="deepseek">Deepseek AI (Reasoning & Chat)</option>
                       <option value="deepseek_reasoning">Deepseek Reasoner — Bucket &quot;reasoning&quot;</option>
                       <option value="deepseek_top">Deepseek Reasoner — Bucket &quot;top&quot;</option>
+                      <option value="deepseek_v4_flash">Deepseek — Tier Medium (V4 Flash)</option>
+                      <option value="deepseek_v4_pro">Deepseek — Tier Top (V4 Pro)</option>
                       <option value="kimi">Moonshot Kimi (K2.6)</option>
                       <option value="kimi_k3">Moonshot Kimi K3 — Bucket &quot;top&quot; Tier 1</option>
+                      <option value="kimi_k2_5">Moonshot Kimi — Tier Low (K2.5)</option>
                       <option value="openrouter">OpenRouter</option>
                       <option value="qwen">Qwen</option>
+                      <option value="qwen_low">Qwen — Tier Low (3.5 Flash)</option>
+                      <option value="qwen_medium">Qwen — Tier Medium (3.6 Flash)</option>
                       <option value="others">Others (GLM, Llama, DLL - Tier 2)</option>
                     </select>
                   </div>

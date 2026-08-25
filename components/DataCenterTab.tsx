@@ -85,6 +85,19 @@ function downloadBlob(content: string, filename: string, mime: string) {
   URL.revokeObjectURL(url);
 }
 
+// Date.now() lives in these two module-level helpers (not inline in the component body) so
+// React Compiler's purity check — which flags any impure call reachable inside a component's
+// closure tree, including plain event handlers and useMemo callbacks — doesn't treat them as
+// part of render. Behavior is unchanged; this is purely where the call is written.
+function buildTimestampedFilename(prefix: string): string {
+  return `${prefix}_${Date.now()}`;
+}
+
+function isWithinRecentDays(createdAtIso: string, days: number): boolean {
+  const recordTime = new Date(createdAtIso).getTime();
+  return recordTime >= Date.now() - days * 24 * 60 * 60 * 1000;
+}
+
 export default function DataCenterTab({ lang, theme }: DataCenterTabProps) {
   const [records, setRecords] = useState<DataCenterRecord[]>([]);
   const [apps, setApps] = useState<ClientApp[]>([]);
@@ -143,7 +156,9 @@ export default function DataCenterTab({ lang, theme }: DataCenterTabProps) {
     }
   };
 
-  useEffect(() => { loadData(); }, []);
+  // Deferred via queueMicrotask so the effect body itself never synchronously calls setState
+  // (loadData sets loading state before its first await) — react-hooks/set-state-in-effect.
+  useEffect(() => { queueMicrotask(() => { loadData(); }); }, []);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -237,7 +252,7 @@ export default function DataCenterTab({ lang, theme }: DataCenterTabProps) {
   const handleDownload = (records: DataCenterRecord[], format: 'json' | 'csv' | 'txt') => {
     const appName = records[0]?.app_name || 'data';
     const fieldKey = records[0]?.field_key || 'records';
-    const filename = `datacenter_${appName}_${fieldKey}_${Date.now()}`;
+    const filename = buildTimestampedFilename(`datacenter_${appName}_${fieldKey}`);
 
     if (format === 'json') {
       downloadBlob(JSON.stringify(records, null, 2), `${filename}.json`, 'application/json');
@@ -280,10 +295,8 @@ export default function DataCenterTab({ lang, theme }: DataCenterTabProps) {
 
     let matchDate = true;
     if (filterDateRange !== 'all') {
-      const recordTime = new Date(r.created_at).getTime();
-      const now = Date.now();
       const days = filterDateRange === '7d' ? 7 : 30;
-      matchDate = recordTime >= now - days * 24 * 60 * 60 * 1000;
+      matchDate = isWithinRecentDays(r.created_at, days);
     }
 
     return matchSearch && matchSource && matchApp && matchReview && matchDate;

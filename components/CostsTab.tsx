@@ -66,7 +66,8 @@ export default function CostsTab({ logs, lang, theme, onRefreshLogs }: CostsTabP
 
   useEffect(() => {
     const saved = localStorage.getItem("myai_cost_reset_date");
-    if (saved) setResetDate(saved);
+    // Deferred via queueMicrotask — react-hooks/set-state-in-effect.
+    if (saved) queueMicrotask(() => setResetDate(saved));
   }, []);
 
   const handleResetLogs = () => {

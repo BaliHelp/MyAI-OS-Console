@@ -63,8 +63,11 @@ export default function RoutingTab({ lang, theme }: RoutingTabProps) {
     }
   };
 
+  // Deferred via queueMicrotask so the effect body itself never synchronously calls setState
+  // (fetchRoutingData sets loading state before its first await) —
+  // react-hooks/set-state-in-effect.
   useEffect(() => {
-    fetchRoutingData();
+    queueMicrotask(() => { fetchRoutingData(); });
   }, []);
 
   const handleAddField = async (e: React.FormEvent) => {

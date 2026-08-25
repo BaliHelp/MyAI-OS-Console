@@ -75,7 +75,9 @@ export default function PersonasTab({ lang, theme, apps }: PersonasTabProps) {
     }
   };
 
-  useEffect(() => { fetchPersonas(); }, []);
+  // Deferred via queueMicrotask so the effect body itself never synchronously calls setState
+  // (fetchPersonas sets loading state before its first await) — react-hooks/set-state-in-effect.
+  useEffect(() => { queueMicrotask(() => { fetchPersonas(); }); }, []);
 
   const updateEditField = (id: string, field: string, value: any) => {
     setEditMap((prev) => ({
@@ -338,7 +340,7 @@ export default function PersonasTab({ lang, theme, apps }: PersonasTabProps) {
         <div className="py-16 text-center space-y-3">
           <Bot className="h-10 w-10 text-bento-text-secondary/30 mx-auto" />
           <p className="text-sm text-bento-text-secondary">Belum ada persona yang dikonfigurasi.</p>
-          <p className="text-xs text-bento-text-secondary opacity-60">Klik "Tambah Persona" untuk membuat persona pertama.</p>
+          <p className="text-xs text-bento-text-secondary opacity-60">Klik &quot;Tambah Persona&quot; untuk membuat persona pertama.</p>
         </div>
       )}
 

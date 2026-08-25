@@ -56,8 +56,10 @@ export default function SpecsTab({ lang, theme }: SpecsTabProps) {
     }
   };
 
+  // Deferred via queueMicrotask so the effect body itself never synchronously calls setState
+  // (fetchSpecs sets loading state before its first await) — react-hooks/set-state-in-effect.
   useEffect(() => {
-    fetchSpecs();
+    queueMicrotask(() => { fetchSpecs(); });
   }, []);
 
   const openEditor = (spec: FieldSpec) => {

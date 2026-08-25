@@ -80,8 +80,11 @@ export default function HealthTab({ lang, theme }: HealthTabProps) {
     finally { setLoadingConn(false); }
   }, [providerKeys]);
 
-  useEffect(() => { fetchProviderKeys(); }, [fetchProviderKeys]);
-  useEffect(() => { if (providerKeys.length >= 0) fetchConnections(); }, [providerKeys.length]);
+  // Deferred via queueMicrotask so the effect body itself never synchronously calls setState
+  // (both fetch functions set loading state before their first await) —
+  // react-hooks/set-state-in-effect.
+  useEffect(() => { queueMicrotask(() => { fetchProviderKeys(); }); }, [fetchProviderKeys]);
+  useEffect(() => { if (providerKeys.length >= 0) queueMicrotask(() => { fetchConnections(); }); }, [providerKeys.length]);
 
   const activeKeys   = providerKeys.filter(k => k.status === 'active');
   const cooldownKeys = providerKeys.filter(k => k.status === 'cooldown');

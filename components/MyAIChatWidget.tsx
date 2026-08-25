@@ -115,7 +115,8 @@ export default function MyAIChatWidget({ apps = [], logs = [], apiKeys = [], doc
     if (isOpen) {
       scrollToBottom();
       inputRef.current?.focus();
-      setHasNewMessage(false);
+      // Deferred via queueMicrotask — react-hooks/set-state-in-effect.
+      queueMicrotask(() => setHasNewMessage(false));
     }
   }, [messages, isOpen]);
 
@@ -123,7 +124,7 @@ export default function MyAIChatWidget({ apps = [], logs = [], apiKeys = [], doc
     if (!isOpen && messages.length > 1) {
       const last = messages[messages.length - 1];
       if (last.role === "assistant" && last.id !== "welcome") {
-        setHasNewMessage(true);
+        queueMicrotask(() => setHasNewMessage(true));
       }
     }
   }, [messages, isOpen]);

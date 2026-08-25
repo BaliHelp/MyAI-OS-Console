@@ -13,7 +13,9 @@ export default function GlobalLoader({ loading }: GlobalLoaderProps) {
 
   useEffect(() => {
     if (loading) {
-      setVisible(true);
+      // Deferred via queueMicrotask so the effect body itself never synchronously calls
+      // setState — react-hooks/set-state-in-effect.
+      queueMicrotask(() => setVisible(true));
       const interval = setInterval(() => {
         setSymbolIdx((prev) => (prev + 1) % symbols.length);
       }, 250);

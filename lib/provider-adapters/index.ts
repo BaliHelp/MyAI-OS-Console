@@ -43,6 +43,28 @@ export const PROVIDER_REGISTRY: Record<string, ProviderAdapter> = {
   // tier too (and vice versa) whenever either is referenced.
   kimi_k3: customOpenaiAdapter,
   custom_openai: customOpenaiAdapter,
+
+  // ── Low/Medium/Top tier variants (2026-08-26) ──────────────────────────────────────────────
+  // Same reuse-the-adapter-just-change-model_name pattern as kimi_k3/deepseek_reasoning/
+  // deepseek_top above — each of these is additive: the provider's existing default identity
+  // (gemini, deepseek, qwen, kimi, claude, gpt, grok) and its live model are untouched. These
+  // exist purely so a caller can opt into an explicit cheaper/pricier sibling via `model` or
+  // `provider` in the request body (see the override escape hatch in chat/completions/route.ts)
+  // — none of them are wired into gw_field_pool_assignments, so automatic complexity-tier
+  // routing behaves exactly as before for every field that already exists.
+  gemini_medium: geminiAdapter,
+  gemini_top: geminiAdapter,
+  deepseek_v4_flash: deepseekAdapter,
+  deepseek_v4_pro: deepseekAdapter,
+  qwen_low: customOpenaiAdapter,
+  qwen_medium: customOpenaiAdapter,
+  kimi_k2_5: customOpenaiAdapter,
+  claude_low: claudeAdapter,
+  claude_top: claudeAdapter,
+  gpt_medium: gptAdapter,
+  gpt_top: gptAdapter,
+  grok_low: grokAdapter,
+  grok_medium: grokAdapter,
 };
 
 /**
@@ -59,6 +81,23 @@ export const DEFAULT_MODEL_BY_PROVIDER: Record<string, string> = {
   deepseek: DEEPSEEK_DEFAULT_MODEL,
   deepseek_reasoning: DEEPSEEK_REASONER_MODEL,
   deepseek_top: DEEPSEEK_REASONER_MODEL,
+
+  // Low/Medium/Top tier variants — default model_name used when a gw_provider_keys row for
+  // that identity doesn't override it (the seeding migration always sets model_name explicitly,
+  // but this keeps the identity resolvable even if a row is ever added without one).
+  gemini_medium: "gemini-2.5-flash",
+  gemini_top: "gemini-3.1-pro-preview",
+  deepseek_v4_flash: "deepseek-v4-flash",
+  deepseek_v4_pro: "deepseek-v4-pro",
+  qwen_low: "qwen3.5-flash",
+  qwen_medium: "qwen3.6-flash",
+  kimi_k2_5: "kimi-k2.5",
+  claude_low: "claude-haiku-4-5-20251001",
+  claude_top: "claude-opus-5",
+  gpt_medium: "gpt-4.1",
+  gpt_top: "gpt-5.1",
+  grok_low: "grok-build-0.1",
+  grok_medium: "grok-4.3",
 };
 
 /**
@@ -74,6 +113,23 @@ export const PUBLIC_PROVIDER_NAME: Record<string, string> = {
   deepseek_reasoning: "deepseek",
   deepseek_top: "deepseek",
   kimi_k3: "kimi",
+
+  // Low/Medium/Top tier variants fold back to their parent provider's public name for the same
+  // reason as above — a caller doing a coarse `provider` override (e.g. "gemini") should match
+  // any live Gemini-family key, while an exact `model` override still picks the precise tier.
+  gemini_medium: "gemini",
+  gemini_top: "gemini",
+  deepseek_v4_flash: "deepseek",
+  deepseek_v4_pro: "deepseek",
+  qwen_low: "qwen",
+  qwen_medium: "qwen",
+  kimi_k2_5: "kimi",
+  claude_low: "claude",
+  claude_top: "claude",
+  gpt_medium: "gpt",
+  gpt_top: "gpt",
+  grok_low: "grok",
+  grok_medium: "grok",
 };
 
 /**

@@ -92,8 +92,11 @@ export default function OverviewTab({ apps, apiKeys, logs, lang, theme }: Overvi
     }
   };
 
+  // Deferred via queueMicrotask so the effect body itself never synchronously calls setState
+  // (fetchConnectionStatuses sets loading state before its first await) —
+  // react-hooks/set-state-in-effect.
   useEffect(() => {
-    fetchConnectionStatuses();
+    queueMicrotask(() => { fetchConnectionStatuses(); });
   }, []);
 
   // Live provider -> model routing, from the public /api/v1/models endpoint. Refreshed rarely

@@ -593,11 +593,17 @@ ${liveDiagnosticSummary}
         return publicProvider === overrideProvider;
       });
 
-      // Same capability/scope guards the normal tier loop applies per-provider below.
+      // Same capability/scope guards the normal tier loop applies per-provider below. The
+      // tools-mode gate accepts the whole GPT family (plain gpt + the gpt_medium/gpt_top tier
+      // variants added 2026-08-26) — they all resolve to the same gptAdapter, which is the only
+      // adapter with real tool-calling support (see gpt.ts; note it pins the actual model to
+      // gpt-4o whenever tools are present, regardless of the key's configured model_name, so the
+      // tier distinction only applies to non-tools calls).
+      const GPT_FAMILY_PROVIDERS = new Set(["gpt", "gpt_medium", "gpt_top"]);
       const inScopeMatches = matchesOverride
         .filter((k) => !keyData.provider_scope || keyData.provider_scope.includes(k.provider))
         .filter((k) => !requiresVision || PROVIDER_REGISTRY[k.provider]?.supportsVision === true)
-        .filter((k) => !hasTools || k.provider === "gpt")
+        .filter((k) => !hasTools || GPT_FAMILY_PROVIDERS.has(k.provider))
         .filter((k) => !(k.cooldown_until && new Date(k.cooldown_until) > new Date()));
 
       if (inScopeMatches.length === 0) {
