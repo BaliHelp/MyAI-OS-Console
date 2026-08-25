@@ -32,6 +32,15 @@ export interface UsageLog {
   ocr_fallback_to_claude?: boolean;
 }
 
+export interface ApiConnection {
+  id: string;
+  provider: string;
+  label: string | null;
+  connected: boolean;
+  details: string;
+  displayName: string;
+}
+
 export interface BusinessProfile {
   id: string;
   title: string;

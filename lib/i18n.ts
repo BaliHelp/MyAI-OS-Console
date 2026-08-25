@@ -62,6 +62,15 @@ export const translations = {
     colType: "Tipe Tugas",
     colTokens: "Token",
     colTime: "Waktu",
+    networkGraphTitle: "Jaringan Aplikasi → Provider → Model",
+    networkGraphSubtitle: "Ketebalan garis mengikuti volume panggilan real",
+    rankingCardTitle: "Peringkat Penggunaan",
+    rankingLiveRoutingLabel: "Model Aktif Saat Ini",
+    rankingLiveRoutingNote: "Mencerminkan konfigurasi routing saat ini, bukan riwayat pemakaian per panggilan.",
+    autoTourLabel: "Auto Tour",
+    autoTourPaused: "Tur Dijeda",
+    autoTourResume: "Lanjutkan Auto Tour",
+    providerUnhealthyBadge: "Provider Bermasalah",
 
     // Apps Tab
     appsTitle: "Manajemen Aplikasi",
@@ -182,6 +191,15 @@ export const translations = {
     colType: "Task Type",
     colTokens: "Tokens",
     colTime: "Time",
+    networkGraphTitle: "App → Provider → Model Network",
+    networkGraphSubtitle: "Line thickness reflects real call volume",
+    rankingCardTitle: "Usage Ranking",
+    rankingLiveRoutingLabel: "Currently Active Model",
+    rankingLiveRoutingNote: "Reflects current routing config, not per-call usage history.",
+    autoTourLabel: "Auto Tour",
+    autoTourPaused: "Tour Paused",
+    autoTourResume: "Resume Auto Tour",
+    providerUnhealthyBadge: "Provider Unhealthy",
 
     // Apps Tab
     appsTitle: "Application Management",
