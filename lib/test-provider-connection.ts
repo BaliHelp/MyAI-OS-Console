@@ -132,11 +132,20 @@ async function testGemini(rawKey: string, modelName: string | null): Promise<Con
 
 async function testGpt(rawKey: string, modelName: string | null): Promise<ConnectionTestResult> {
   const effectiveModel = modelName || GPT_DEFAULT_MODEL;
+  // gpt-5.x rejects `max_tokens` outright — same fix as lib/provider-adapters/gpt.ts, kept in
+  // sync so this test can never report a tier "broken" that production actually handles fine
+  // (or vice versa). It's also a reasoning model that spends part of its output budget on
+  // internal reasoning tokens before any visible text — same class of issue deepseek-reasoner
+  // already needs a raised budget for (see testDeepseek's caller in production, deepseek.ts) —
+  // so a 5-token probe reliably finishes with zero visible output ("length") on this one model.
+  const isGpt5 = effectiveModel.startsWith("gpt-5");
+  const maxTokensParam = isGpt5 ? "max_completion_tokens" : "max_tokens";
+  const maxTokensValue = isGpt5 ? 64 : 5;
   try {
     const res = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${rawKey}` },
-      body: JSON.stringify({ model: effectiveModel, messages: [{ role: "user", content: "OK" }], max_tokens: 5 }),
+      body: JSON.stringify({ model: effectiveModel, messages: [{ role: "user", content: "OK" }], [maxTokensParam]: maxTokensValue }),
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
     if (res.ok) return { connected: true, details: `Key & model OK (model: ${effectiveModel})` };
@@ -228,18 +237,38 @@ export async function testProviderConnection(
     provider === "kimi" ||
     provider === "openrouter" ||
     provider === "qwen" ||
-    provider === "kimi_k3"
+    provider === "kimi_k3" ||
+    // Low/Medium/Top tier variants (2026-08-26) that reuse customOpenaiAdapter — see
+    // lib/provider-adapters/index.ts.
+    provider === "qwen_low" ||
+    provider === "qwen_medium" ||
+    provider === "kimi_k2_5"
   ) {
     return testCustomOpenAiCompatible(rawKey, baseUrl, modelName);
   }
-  if (provider === "gemini") return testGemini(rawKey, modelName);
-  if (provider === "gpt") return testGpt(rawKey, modelName);
-  if (provider === "claude") return testClaude(rawKey, modelName);
-  if (provider === "grok") return testGrok(rawKey, modelName);
+  if (provider === "gemini" || provider === "gemini_medium" || provider === "gemini_top") {
+    return testGemini(rawKey, modelName);
+  }
+  if (provider === "gpt" || provider === "gpt_medium" || provider === "gpt_top") {
+    return testGpt(rawKey, modelName);
+  }
+  if (provider === "claude" || provider === "claude_low" || provider === "claude_top") {
+    return testClaude(rawKey, modelName);
+  }
+  if (provider === "grok" || provider === "grok_low" || provider === "grok_medium") {
+    return testGrok(rawKey, modelName);
+  }
   // deepseek_reasoning/deepseek_top are the same DeepSeek API as 'deepseek', routed through
   // their own provider name only so tier pooling never mixes them with the plain light-tier
   // key (see lib/provider-adapters/index.ts) — the connection test itself is identical.
-  if (provider === "deepseek" || provider === "deepseek_reasoning" || provider === "deepseek_top") {
+  // deepseek_v4_flash/deepseek_v4_pro (Low/Medium/Top tiers, 2026-08-26) are the same API too.
+  if (
+    provider === "deepseek" ||
+    provider === "deepseek_reasoning" ||
+    provider === "deepseek_top" ||
+    provider === "deepseek_v4_flash" ||
+    provider === "deepseek_v4_pro"
+  ) {
     return testDeepseek(rawKey, modelName);
   }
 

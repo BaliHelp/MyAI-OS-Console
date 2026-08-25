@@ -73,14 +73,21 @@ export const gptAdapter: ProviderAdapter = {
           });
         }
 
+        const model = options.model_name || GPT_DEFAULT_MODEL;
+        // gpt-5.x rejects `max_tokens` outright ("Unsupported parameter... Use
+        // 'max_completion_tokens' instead" — confirmed live 2026-08-26 testing gpt-5.1). Every
+        // other model this gateway calls (gpt-4o-mini, gpt-4.1, gpt-4o) still only accepts the
+        // older `max_tokens`, so this is scoped to the gpt-5 family rather than switched globally.
+        const maxTokensParam = model.startsWith("gpt-5") ? "max_completion_tokens" : "max_tokens";
+
         requestBody = {
-          model: options.model_name || GPT_DEFAULT_MODEL,
+          model,
           messages: [
             { role: "system", content: systemPrompt },
             { role: "user", content: contentArray },
           ],
           temperature: options.temperature ?? 0.7,
-          max_tokens: options.max_tokens ?? 2000,
+          [maxTokensParam]: options.max_tokens ?? 2000,
           // Never combined with tools by the gateway (route.ts falls back to buffered JSON when
           // both are requested), so this branch is the only place `stream` needs handling.
           ...(options.stream ? { stream: true, stream_options: { include_usage: true } } : {}),

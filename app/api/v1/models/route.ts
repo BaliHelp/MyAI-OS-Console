@@ -235,9 +235,10 @@ const MODEL_DETAILS: Record<string, ModelDetail> = {
     reasoning_level: "medium",
     recommended_for: ["text_only", "vision_input"],
   },
-  "gemini-2.5-flash": {
-    description: "Google's price-performance Flash model, one generation before the gateway's default (3.5 Flash-Lite).",
-    pricing_per_million_tokens: "$0.30 input (text/image/video) / $2.50 output ($1.00/M for audio input)",
+  "gemini-3.6-flash": {
+    description: "Google's mid-tier Flash model, built for complex coding and agentic workflows.",
+    pricing_per_million_tokens: "$0.75 input / $3.75 output (promotional pricing through 2026-12-31; $1.50/$7.50 after)",
+    notes: "gemini-2.5-flash (this tier's original pick) 404s live as of 2026-08-26 — \"no longer available to new users\", confirmed by real API test, not just docs. Swapped to Google's own named replacement.",
     reasoning_level: "medium",
     recommended_for: ["text_only", "vision_input"],
   },
@@ -271,6 +272,33 @@ const TIER_UPDATE_NOTICE =
 // future integration (e.g. an article-to-speech feature) knows this credential exists and is
 // reachable directly against Google's Cloud TTS/STT REST APIs (not through this gateway's
 // chat-completions routing, which has no TTS/STT adapter yet).
+// Callers frequently only see the auto-routed model a field picks for them and don't realize
+// they can ask for a specific one — this documents the escape hatch that already exists in
+// app/api/v1/chat/completions/route.ts (the `model`/`provider` override), inline in the same
+// response that lists what's available to pick from. Structured (not just prose) so a caller's
+// own tooling can read it, plus a human-readable `summary`.
+const MODEL_SELECTION_GUIDE = {
+  summary:
+    "Website/aplikasi Anda BEBAS memilih model AI spesifik dari daftar `models` di bawah — tidak " +
+    "wajib pakai auto-routing berbasis complexity (bagian `tiers`). Cukup kirim field `model` " +
+    "(atau `provider` untuk granularity lebih kasar) di body POST /api/v1/chat/completions.",
+  fields: {
+    model: "String model persis dari `models[].model` di bawah (mis. \"claude-opus-5\") — pilihan paling presisi, langsung ke tier itu.",
+    provider: "String provider dari `models[].provider` (mis. \"gpt\") — dapat model manapun yang aktif di provider itu, tidak presisi ke tier tertentu.",
+  },
+  requirement:
+    "API key Anda harus punya provider_scope yang mengizinkan provider/tier tersebut (di-grant admin lewat dashboard Settings -> API Keys). " +
+    "Kalau belum diizinkan, request akan ditolak dengan error 400 yang jelas menyebutkan scope apa yang kurang.",
+  example: {
+    curl:
+      "curl -X POST https://console.myai.nexus/api/v1/chat/completions " +
+      "-H \"Authorization: Bearer <api-key>\" -H \"Content-Type: application/json\" " +
+      "-d '{\"model\": \"claude-opus-5\", \"prompt\": \"Halo\"}'",
+  },
+  fallback_behavior:
+    "Kalau `model`/`provider` TIDAK dikirim, request jatuh ke auto-routing normal (lihat `tiers` di bawah) — behavior lama tetap sama persis, tidak berubah.",
+};
+
 const TTS_STT_KEY_NOTICE =
   "Ekosistem ini juga memiliki 1 API key Google (provider 'google_tts_stt' di atas) yang " +
   "dibatasi Google khusus untuk Cloud Text-to-Speech & Speech-to-Text saja — bukan untuk " +
@@ -435,6 +463,12 @@ export async function GET() {
     {
       generated_at: new Date().toISOString(),
       tier_update_notice: TIER_UPDATE_NOTICE,
+      model_selection_guide: MODEL_SELECTION_GUIDE,
+      related_endpoints: {
+        chat_completions: "POST https://console.myai.nexus/api/v1/chat/completions",
+        image_generation: "POST https://console.myai.nexus/api/v1/images/generations — lihat model dengan recommended_for berisi 'image_generation' di bawah",
+        human_readable: "https://console.myai.nexus/models — versi tabel yang bisa dibaca manusia dari response ini",
+      },
       tts_stt_key_notice: TTS_STT_KEY_NOTICE,
       complexity_classification: {
         light: `prompt length <= ${COMPLEXITY_THRESHOLDS.light} characters`,

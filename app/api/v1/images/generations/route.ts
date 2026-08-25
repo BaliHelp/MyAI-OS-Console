@@ -9,6 +9,22 @@ import { IMAGE_PROVIDER_REGISTRY, DEFAULT_IMAGE_MODEL_BY_PROVIDER } from "@/lib/
 // teks — sama seperti kimi_k3/deepseek_top terpisah dari provider induknya (lihat
 // lib/provider-adapters/index.ts) — supaya grant akses & tracking biaya image-gen tidak otomatis
 // nempel ke siapa saja yang sudah punya akses Gemini teks.
+
+// Self-documenting GET — same reasoning as the GET added to /api/v1/chat/completions/route.ts.
+export async function GET() {
+  return NextResponse.json({
+    endpoint: "POST /api/v1/images/generations",
+    description: "Kirim `prompt` untuk generate gambar. Auth: header 'Authorization: Bearer <api-key>'.",
+    body: { prompt: "string, wajib", provider: "opsional, default 'gemini'", model: "opsional, default model termurah provider itu" },
+    scope_requirement: "API key butuh provider_scope '<provider>_image' (mis. 'gemini_image') — terpisah dari scope teks provider yang sama.",
+    related_endpoints: {
+      models_list: "GET https://console.myai.nexus/api/v1/models — cari model dengan recommended_for berisi 'image_generation'",
+      models_human_readable: "https://console.myai.nexus/models",
+      chat_completions: "POST https://console.myai.nexus/api/v1/chat/completions",
+    },
+  });
+}
+
 export async function POST(req: NextRequest) {
   if (!supabaseAdmin) {
     return NextResponse.json({ error: "Database not configured" }, { status: 503 });

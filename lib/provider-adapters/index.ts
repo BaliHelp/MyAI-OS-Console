@@ -85,7 +85,10 @@ export const DEFAULT_MODEL_BY_PROVIDER: Record<string, string> = {
   // Low/Medium/Top tier variants — default model_name used when a gw_provider_keys row for
   // that identity doesn't override it (the seeding migration always sets model_name explicitly,
   // but this keeps the identity resolvable even if a row is ever added without one).
-  gemini_medium: "gemini-2.5-flash",
+  // gemini-2.5-flash 404s live ("no longer available to new users") — confirmed 2026-08-26,
+  // same class of drift the GEMINI_FALLBACK_MODEL comment in gemini.ts already warns about.
+  // Google's own error names gemini-3.6-flash as the replacement.
+  gemini_medium: "gemini-3.6-flash",
   gemini_top: "gemini-3.1-pro-preview",
   deepseek_v4_flash: "deepseek-v4-flash",
   deepseek_v4_pro: "deepseek-v4-pro",

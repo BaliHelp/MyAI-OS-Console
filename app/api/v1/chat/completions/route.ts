@@ -7,6 +7,27 @@ import { classifyComplexity } from "@/lib/classify-complexity";
 import fs from "fs";
 import path from "path";
 
+// Self-documenting GET — this endpoint is POST-only for actual completions, but a developer
+// hitting it in a browser/curl to explore should land on guidance instead of a bare 405. Points
+// back to GET /api/v1/models (the live model list + the model/provider override this endpoint
+// honors) and the human-readable /models page, so callers can self-serve without needing the
+// dashboard or asking an admin. Deliberately public (see PUBLIC_PATHS in proxy.ts) — same
+// reasoning as the POST handler itself.
+export async function GET() {
+  return NextResponse.json({
+    endpoint: "POST /api/v1/chat/completions",
+    description: "Kirim `prompt` (atau `messages`) untuk dapat jawaban AI. Auth: header 'Authorization: Bearer <api-key>'.",
+    model_selection:
+      "BEBAS pilih model spesifik dengan field `model` atau `provider` di body — lihat `model_selection_guide` " +
+      "di GET /api/v1/models untuk daftar lengkap & contoh. Tanpa field itu, request auto-routed berdasar complexity prompt.",
+    related_endpoints: {
+      models_list: "GET https://console.myai.nexus/api/v1/models",
+      models_human_readable: "https://console.myai.nexus/models",
+      image_generation: "POST https://console.myai.nexus/api/v1/images/generations",
+    },
+  });
+}
+
 export async function POST(req: NextRequest) {
   if (!supabaseAdmin) {
     return NextResponse.json({ error: "Database not configured" }, { status: 503 });
