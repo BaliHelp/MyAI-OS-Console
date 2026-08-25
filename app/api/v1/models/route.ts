@@ -48,6 +48,8 @@ const PROVIDER_DISPLAY_NAME: Record<string, string> = {
   // `model` field is what actually distinguishes the tier to a caller.
   gemini_medium: "Gemini",
   gemini_top: "Gemini",
+  gemini_flash_3_7: "Gemini",
+  gemini_flash_3_5: "Gemini",
   deepseek_v4_flash: "DeepSeek",
   deepseek_v4_pro: "DeepSeek",
   qwen_low: "Qwen",
@@ -248,12 +250,49 @@ const MODEL_DETAILS: Record<string, ModelDetail> = {
     reasoning_level: "high",
     recommended_for: ["reasoning", "coding"],
   },
+  "gemini-3.7-flash": {
+    description: "Google's newest-generation mid-tier Flash model, same price point as 3.6 Flash.",
+    pricing_per_million_tokens: "$0.75 input / $3.75 output (promotional pricing through 2026-12-31; $1.50/$7.50 after)",
+    reasoning_level: "medium",
+    recommended_for: ["text_only", "vision_input"],
+  },
+  "gemini-3.5-flash": {
+    description: "Google's Flash model one generation before 3.6/3.7 — priced higher than both despite being older, not a cost-effective pick.",
+    pricing_per_million_tokens: "$1.50 input / $9.00 output",
+    reasoning_level: "medium",
+    recommended_for: ["text_only", "vision_input"],
+  },
+  // ── Image generation, cheapest to most expensive ────────────────────────────────────────────
+  // All 4 share the same shared Gemini key pool (see lib/image-adapters/gemini-image.ts) — none
+  // of these go through gw_provider_keys, so a caller reaches any of them by passing `model` in
+  // the POST /v1/images/generations body (defaults to the cheapest, gemini-3.1-flash-lite-image).
   "gemini-3.1-flash-lite-image": {
     description: "Google's cheapest current dedicated image-generation model — text-to-image, served via this gateway's separate POST /v1/images/generations endpoint (not /v1/chat/completions).",
     pricing_per_million_tokens: "$0.0336 per 1K-resolution image",
-    notes: "Requires provider_scope 'gemini_image' — a separate grant from Gemini text access. See lib/image-adapters/gemini-image.ts.",
+    notes: "Requires provider_scope 'gemini_image' — a separate grant from Gemini text access. Default model for POST /v1/images/generations. See lib/image-adapters/gemini-image.ts.",
     reasoning_level: "none",
     recommended_for: ["image_generation", "cheapest_option"],
+  },
+  "gemini-2.5-flash-image": {
+    description: "Google's previous-generation image model (\"Nano Banana\") — legacy but still live, second-cheapest image option.",
+    pricing_per_million_tokens: "$0.039 per image (up to 1024x1024px; $0.0195 on Batch API)",
+    notes: "Requires provider_scope 'gemini_image'. Pass `\"model\": \"gemini-2.5-flash-image\"` in the POST /v1/images/generations body to use this instead of the cheaper default.",
+    reasoning_level: "none",
+    recommended_for: ["image_generation"],
+  },
+  "gemini-3.1-flash-image": {
+    description: "Google's current general-purpose image model (\"Nano Banana 2\") — more versatile/higher quality than the Lite variant, priced per resolution.",
+    pricing_per_million_tokens: "$0.067 per image at 1K, $0.101 at 2K, $0.151 at 4K (50% lower on Batch API)",
+    notes: "Requires provider_scope 'gemini_image'. Pass `\"model\": \"gemini-3.1-flash-image\"` in the POST /v1/images/generations body to use this instead of the cheaper default.",
+    reasoning_level: "none",
+    recommended_for: ["image_generation"],
+  },
+  "gemini-3-pro-image": {
+    description: "Google's premium image model (\"Nano Banana Pro\") — highest quality, most expensive image option.",
+    pricing_per_million_tokens: "$0.134 per image at 1K/2K, $0.24 at 4K",
+    notes: "Requires provider_scope 'gemini_image'. Pass `\"model\": \"gemini-3-pro-image\"` in the POST /v1/images/generations body to use this instead of the cheaper default.",
+    reasoning_level: "none",
+    recommended_for: ["image_generation", "premium_quality"],
   },
 };
 
@@ -390,29 +429,38 @@ export async function GET() {
     }
   }
 
-  // ── Synthetic Gemini Image Generator entry ──────────────────────────────
-  // gemini-3.1-flash-lite-image doesn't go through gw_provider_keys at all — it reuses the same
-  // shared Gemini key pool as the 'gemini' text provider (see lib/image-adapters/gemini-image.ts),
-  // so it never appears in candidatesByProvider above. Surface it here, but only when Gemini
-  // actually has a live key — same "only show what's really usable right now" philosophy as the
-  // rest of this endpoint — served via POST /v1/images/generations, not /v1/chat/completions.
+  // ── Synthetic Gemini Image Generator entries ─────────────────────────────
+  // None of these 4 go through gw_provider_keys — they all reuse the same shared Gemini key pool
+  // as the 'gemini' text provider (see lib/image-adapters/gemini-image.ts), so they never appear
+  // in candidatesByProvider above. Surface them here, but only when Gemini actually has a live
+  // key — same "only show what's really usable right now" philosophy as the rest of this
+  // endpoint — served via POST /v1/images/generations (pass `model` to pick one; defaults to the
+  // cheapest), not /v1/chat/completions. Listed cheapest-first so callers scanning for a budget
+  // option find it immediately.
+  const IMAGE_MODELS_CHEAPEST_FIRST = [
+    "gemini-3.1-flash-lite-image",
+    "gemini-2.5-flash-image",
+    "gemini-3.1-flash-image",
+    "gemini-3-pro-image",
+  ];
   if ((candidatesByProvider.get("gemini") || []).length > 0) {
-    const imageModel = "gemini-3.1-flash-lite-image";
-    const detail = MODEL_DETAILS[imageModel];
-    const recommendedFor = detail?.recommended_for ?? [];
-    models.push({
-      name: "Gemini",
-      provider: "gemini",
-      model: imageModel,
-      description: detail?.description,
-      pricing_per_million_tokens: detail?.pricing_per_million_tokens,
-      supports_vision: false,
-      supports_tools: false,
-      notes: detail?.notes,
-      reasoning_level: "none",
-      recommended_for: recommendedFor,
-      spec_label: `Gemini 3.1 Flash Lite Image (None) — ${recommendedFor.join(", ")}`,
-    });
+    for (const imageModel of IMAGE_MODELS_CHEAPEST_FIRST) {
+      const detail = MODEL_DETAILS[imageModel];
+      const recommendedFor = detail?.recommended_for ?? [];
+      models.push({
+        name: "Gemini",
+        provider: "gemini",
+        model: imageModel,
+        description: detail?.description,
+        pricing_per_million_tokens: detail?.pricing_per_million_tokens,
+        supports_vision: false,
+        supports_tools: false,
+        notes: detail?.notes,
+        reasoning_level: "none",
+        recommended_for: recommendedFor,
+        spec_label: `${imageModel} (None) — ${recommendedFor.join(", ")}`,
+      });
+    }
   }
 
   // ── Per-field tier structure: "how a request gets routed" ─────────────
@@ -469,6 +517,13 @@ export async function GET() {
         image_generation: "POST https://console.myai.nexus/api/v1/images/generations — lihat model dengan recommended_for berisi 'image_generation' di bawah",
         human_readable: "https://console.myai.nexus/models — versi tabel yang bisa dibaca manusia dari response ini",
       },
+      // Explicit pointer, on top of `cheapest_option` in the matching model's `recommended_for`
+      // below — the user's own priority was "harga murah wajib di-marking, apalagi image
+      // generate" (cheap pricing must be marked, especially for image generation), so this is
+      // surfaced as its own top-level field rather than requiring a caller to scan/filter `models`.
+      cheapest_image_generation_model: (candidatesByProvider.get("gemini") || []).length > 0
+        ? { provider: "gemini", model: "gemini-3.1-flash-lite-image", pricing: "$0.0336 per 1K-resolution image", endpoint: "POST /api/v1/images/generations" }
+        : null,
       tts_stt_key_notice: TTS_STT_KEY_NOTICE,
       complexity_classification: {
         light: `prompt length <= ${COMPLEXITY_THRESHOLDS.light} characters`,

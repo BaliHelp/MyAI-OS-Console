@@ -246,7 +246,13 @@ export async function testProviderConnection(
   ) {
     return testCustomOpenAiCompatible(rawKey, baseUrl, modelName);
   }
-  if (provider === "gemini" || provider === "gemini_medium" || provider === "gemini_top") {
+  if (
+    provider === "gemini" ||
+    provider === "gemini_medium" ||
+    provider === "gemini_top" ||
+    provider === "gemini_flash_3_7" ||
+    provider === "gemini_flash_3_5"
+  ) {
     return testGemini(rawKey, modelName);
   }
   if (provider === "gpt" || provider === "gpt_medium" || provider === "gpt_top") {

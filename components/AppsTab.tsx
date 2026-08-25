@@ -12,7 +12,7 @@ const SUPPORTED_PROVIDERS = [
   "gemini", "gpt", "claude", "grok", "deepseek", "deepseek_reasoning", "deepseek_top",
   "kimi", "kimi_k3", "openrouter", "qwen",
   // Low/Medium/Top tier variants (2026-08-26)
-  "gemini_medium", "gemini_top", "deepseek_v4_flash", "deepseek_v4_pro",
+  "gemini_medium", "gemini_top", "gemini_flash_3_7", "gemini_flash_3_5", "deepseek_v4_flash", "deepseek_v4_pro",
   "qwen_low", "qwen_medium", "kimi_k2_5", "claude_low", "claude_top",
   "gpt_medium", "gpt_top", "grok_low", "grok_medium",
   "gemini_image",

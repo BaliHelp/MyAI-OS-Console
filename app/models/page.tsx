@@ -168,8 +168,22 @@ export default function ModelsPage() {
                             <div className="text-[11px] text-gray-500 mt-1.5">{m.recommended_for.join(", ")}</div>
                           )}
                         </td>
-                        <td className="px-4 py-3 text-xs text-gray-300 max-w-[220px]">
-                          {m.pricing_per_million_tokens || <span className="text-gray-600">—</span>}
+                        <td className="px-4 py-3 text-xs max-w-[220px]">
+                          <div className="flex items-center gap-2">
+                            <span className={m.recommended_for.includes("cheapest_option") ? "text-emerald-300 font-semibold" : "text-gray-300"}>
+                              {m.pricing_per_million_tokens || <span className="text-gray-600">—</span>}
+                            </span>
+                            {m.recommended_for.includes("cheapest_option") && (
+                              <span className="shrink-0 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wide bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                                Termurah
+                              </span>
+                            )}
+                            {m.recommended_for.includes("premium_quality") && (
+                              <span className="shrink-0 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wide bg-purple-500/15 text-purple-300 border border-purple-500/30">
+                                Premium
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="px-4 py-3 text-xs text-gray-400 whitespace-nowrap">
                           {m.context_window || <span className="text-gray-600">—</span>}

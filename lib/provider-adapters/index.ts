@@ -54,6 +54,10 @@ export const PROVIDER_REGISTRY: Record<string, ProviderAdapter> = {
   // routing behaves exactly as before for every field that already exists.
   gemini_medium: geminiAdapter,
   gemini_top: geminiAdapter,
+  // Additional Gemini text generations (2026-08-26) — same reuse pattern, just more granular
+  // price/quality points than the Low/Medium/Top slots above already cover.
+  gemini_flash_3_7: geminiAdapter,
+  gemini_flash_3_5: geminiAdapter,
   deepseek_v4_flash: deepseekAdapter,
   deepseek_v4_pro: deepseekAdapter,
   qwen_low: customOpenaiAdapter,
@@ -90,6 +94,8 @@ export const DEFAULT_MODEL_BY_PROVIDER: Record<string, string> = {
   // Google's own error names gemini-3.6-flash as the replacement.
   gemini_medium: "gemini-3.6-flash",
   gemini_top: "gemini-3.1-pro-preview",
+  gemini_flash_3_7: "gemini-3.7-flash",
+  gemini_flash_3_5: "gemini-3.5-flash",
   deepseek_v4_flash: "deepseek-v4-flash",
   deepseek_v4_pro: "deepseek-v4-pro",
   qwen_low: "qwen3.5-flash",
@@ -122,6 +128,8 @@ export const PUBLIC_PROVIDER_NAME: Record<string, string> = {
   // any live Gemini-family key, while an exact `model` override still picks the precise tier.
   gemini_medium: "gemini",
   gemini_top: "gemini",
+  gemini_flash_3_7: "gemini",
+  gemini_flash_3_5: "gemini",
   deepseek_v4_flash: "deepseek",
   deepseek_v4_pro: "deepseek",
   qwen_low: "qwen",

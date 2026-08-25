@@ -546,8 +546,10 @@ export default function SettingsTab({ lang, setLang, theme, setTheme, adminEmail
                       className="w-full px-3 py-2 text-xs rounded-lg border border-bento-border bg-bento-surface text-bento-text-primary focus:outline-none"
                     >
                       <option value="gemini">Google Gemini (Free Tier: OCR, Scan Wajah, DLL)</option>
-                      <option value="gemini_medium">Gemini — Tier Medium (2.5 Flash)</option>
+                      <option value="gemini_medium">Gemini — Tier Medium (3.6 Flash)</option>
                       <option value="gemini_top">Gemini — Tier Top (3.1 Pro Preview)</option>
+                      <option value="gemini_flash_3_7">Gemini — 3.7 Flash</option>
+                      <option value="gemini_flash_3_5">Gemini — 3.5 Flash</option>
                       <option value="claude">Anthropic Claude (Reasoning & Chat Widget - Cadangan)</option>
                       <option value="claude_low">Claude — Tier Low (Haiku 4.5)</option>
                       <option value="claude_top">Claude — Tier Top (Opus 5)</option>
