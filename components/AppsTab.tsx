@@ -48,11 +48,41 @@ interface AppsTabProps {
   onCreateApp: (name: string, slug: string, tier: 'internal' | 'community') => Promise<void>;
   onGenerateKey: (clientAppId: string, scope: string[], rateLimit: number | null) => Promise<{ full_key: string } & ApiKey>;
   onRevokeKey: (keyId: string) => Promise<void>;
+  onUpdateKeyScope?: (keyId: string, scope: string[]) => Promise<void>;
   onDeleteApp?: (appId: string) => Promise<void>;
   onRenameApp?: (appId: string, name: string) => Promise<void>;
 }
 
-export default function AppsTab({ apps, apiKeys, logs, lang, theme, onCreateApp, onGenerateKey, onRevokeKey, onDeleteApp, onRenameApp }: AppsTabProps) {
+// Shared provider multi-select grid — used by both the "generate key" and
+// "edit scope" modals so the two stay in sync.
+function ProviderScopeGrid({ selected, onToggle }: { selected: string[]; onToggle: (prov: string) => void }) {
+  return (
+    <div className="grid grid-cols-3 gap-3 sm:grid-cols-5">
+      {SUPPORTED_PROVIDERS.map(prov => {
+        const isChecked = selected.includes(prov);
+        return (
+          <button
+            key={prov}
+            type="button"
+            onClick={() => onToggle(prov)}
+            className={`p-3 rounded-xl border text-xs font-bold capitalize flex items-center justify-center gap-2 transition-all duration-150 ${
+              isChecked
+                ? 'bg-bento-accent-muted border-bento-accent text-bento-accent shadow-xs'
+                : 'bg-bento-surface border-bento-border text-bento-text-secondary hover:text-bento-text-primary'
+            }`}
+          >
+            <span className={`w-1.5 h-1.5 rounded-full ${isChecked ? 'bg-bento-accent animate-pulse' : 'bg-bento-text-secondary/50'}`} />
+            <span className="flex flex-col items-start leading-tight">
+              <span>{prov.replace(/_/g, " ")}</span>
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+export default function AppsTab({ apps, apiKeys, logs, lang, theme, onCreateApp, onGenerateKey, onRevokeKey, onUpdateKeyScope, onDeleteApp, onRenameApp }: AppsTabProps) {
   const t = translations[lang];
 
   // Tab State
@@ -80,6 +110,43 @@ export default function AppsTab({ apps, apiKeys, logs, lang, theme, onCreateApp,
 
   // Revoke confirmation state
   const [revokeConfirmId, setRevokeConfirmId] = useState<string | null>(null);
+
+  // Edit Scope Modal
+  const [editScopeKey, setEditScopeKey] = useState<ApiKey | null>(null);
+  const [editScopeValue, setEditScopeValue] = useState<string[]>([]);
+  const [editScopeSaving, setEditScopeSaving] = useState(false);
+  const [editScopeError, setEditScopeError] = useState("");
+
+  const openEditScope = (key: ApiKey) => {
+    setEditScopeKey(key);
+    setEditScopeValue([...key.provider_scope]);
+    setEditScopeError("");
+  };
+
+  const toggleEditScope = (prov: string) => {
+    setEditScopeValue(prev =>
+      prev.includes(prov) ? prev.filter(s => s !== prov) : [...prev, prov]
+    );
+  };
+
+  const handleEditScopeSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!editScopeKey || !onUpdateKeyScope) return;
+    if (editScopeValue.length === 0) {
+      setEditScopeError("Pilih minimal satu provider.");
+      return;
+    }
+    setEditScopeSaving(true);
+    setEditScopeError("");
+    try {
+      await onUpdateKeyScope(editScopeKey.id, editScopeValue);
+      setEditScopeKey(null);
+    } catch (err: any) {
+      setEditScopeError(err?.message || "Gagal memperbarui cakupan provider.");
+    } finally {
+      setEditScopeSaving(false);
+    }
+  };
 
   // App Delete confirmation state
   const [deleteAppTarget, setDeleteAppTarget] = useState<ClientApp | null>(null);
@@ -306,9 +373,9 @@ export default function AppsTab({ apps, apiKeys, logs, lang, theme, onCreateApp,
                           : 'bg-bento-surface-lighter border-bento-border'
                       }`}
                     >
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-3">
-                          <code className="px-2.5 py-1 rounded bg-black/20 font-mono text-xs font-semibold text-[#5B8DEF]">
+                      <div className="space-y-2 min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-3">
+                          <code className="px-2.5 py-1 rounded bg-black/20 font-mono text-xs font-semibold text-[#5B8DEF] break-all">
                             {key.key_prefix}••••••••••••••••
                           </code>
                           <span className={`px-2 py-0.5 text-[9px] font-bold rounded-full ${
@@ -320,15 +387,28 @@ export default function AppsTab({ apps, apiKeys, logs, lang, theme, onCreateApp,
                           </span>
                         </div>
 
-                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-gray-400">
-                          <div className="flex items-center gap-1">
-                            <span className="font-semibold">Scopes:</span>
+                        <div className="flex flex-col gap-2 text-xs text-gray-400">
+                          <div className="flex flex-wrap items-center gap-1">
+                            <span className="font-semibold mr-1">Scopes:</span>
                             {key.provider_scope.map(sc => (
                               <span key={sc} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-black/10 text-[9px] uppercase font-bold text-gray-300">
                                 {sc}
                               </span>
                             ))}
+                            {!isRevoked && onUpdateKeyScope && (
+                              <button
+                                type="button"
+                                onClick={() => openEditScope(key)}
+                                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-bento-accent/30 text-bento-accent hover:bg-bento-accent-muted text-[9px] uppercase font-bold transition-colors"
+                                title="Edit cakupan provider"
+                              >
+                                <Pencil className="h-2.5 w-2.5" />
+                                Edit
+                              </button>
+                            )}
                           </div>
+
+                          <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
 
                           {/* Rate limits */}
                           <div className="flex items-center gap-1">
@@ -352,12 +432,13 @@ export default function AppsTab({ apps, apiKeys, logs, lang, theme, onCreateApp,
                             <Activity className="h-3.5 w-3.5 opacity-60" />
                             <span>Panggilan: <strong className="text-gray-300 font-bold">{logs.filter(l => l.api_key_id === key.id).length}x</strong></span>
                           </div>
+                          </div>
                         </div>
                       </div>
 
                       {/* Revoke Controls */}
                       {!isRevoked && (
-                        <div>
+                        <div className="shrink-0">
                           {revokeConfirmId === key.id ? (
                             <div className="flex items-center gap-2">
                               <span className="text-[11px] text-red-400 font-semibold max-w-[200px] text-right">{t.keyRevokeConfirm}</span>
@@ -591,34 +672,12 @@ export default function AppsTab({ apps, apiKeys, logs, lang, theme, onCreateApp,
               <form onSubmit={handleGenerateKeySubmit} className="space-y-4">
                 <div className="space-y-2">
                   <label className="text-xs font-semibold text-bento-text-secondary">{t.keyScope}</label>
-                  <div className="grid grid-cols-3 gap-3 sm:grid-cols-5">
-                    {SUPPORTED_PROVIDERS.map(prov => {
-                      const isChecked = keyScope.includes(prov);
-                      return (
-                        <button
-                          key={prov}
-                          type="button"
-                          onClick={() => {
-                            if (isChecked) {
-                              setKeyScope(keyScope.filter(s => s !== prov));
-                            } else {
-                              setKeyScope([...keyScope, prov]);
-                            }
-                          }}
-                          className={`p-3 rounded-xl border text-xs font-bold capitalize flex items-center justify-center gap-2 transition-all duration-150 ${
-                            isChecked
-                              ? 'bg-bento-accent-muted border-bento-accent text-bento-accent shadow-xs'
-                              : 'bg-bento-surface border-bento-border text-bento-text-secondary hover:text-bento-text-primary'
-                          }`}
-                        >
-                          <span className={`w-1.5 h-1.5 rounded-full ${isChecked ? 'bg-bento-accent animate-pulse' : 'bg-bento-text-secondary/50'}`} />
-                          <span className="flex flex-col items-start leading-tight">
-                            <span>{prov.replace(/_/g, " ")}</span>
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
+                  <ProviderScopeGrid
+                    selected={keyScope}
+                    onToggle={(prov) =>
+                      setKeyScope(keyScope.includes(prov) ? keyScope.filter(s => s !== prov) : [...keyScope, prov])
+                    }
+                  />
                 </div>
 
                 {selectedApp.tier === 'community' ? (
@@ -743,6 +802,51 @@ export default function AppsTab({ apps, apiKeys, logs, lang, theme, onCreateApp,
                 {deletingApp ? "Menghapus..." : "Hapus Permanen"}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 4: EDIT KEY SCOPE */}
+      {editScopeKey && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-fade-in" id="edit-scope-modal">
+          <div className="w-full max-w-lg p-6 rounded-2xl border border-bento-border bg-bento-surface text-bento-text-primary shadow-2xl">
+            <h4 className="font-bold text-lg mb-1">Edit Cakupan Provider</h4>
+            <p className="text-xs text-bento-text-secondary font-mono mb-4 break-all">
+              {editScopeKey.key_prefix}••••••••••••••••
+            </p>
+
+            <form onSubmit={handleEditScopeSubmit} className="space-y-4">
+              {editScopeError && (
+                <div className="p-3 bg-red-500/10 text-red-400 text-xs font-semibold rounded-xl flex items-center gap-2">
+                  <ShieldAlert className="h-4 w-4 shrink-0" />
+                  <span>{editScopeError}</span>
+                </div>
+              )}
+
+              <div className="space-y-2">
+                <label className="text-xs font-semibold text-bento-text-secondary">
+                  {t.keyScope} — pilih model AI yang boleh diakses key ini
+                </label>
+                <ProviderScopeGrid selected={editScopeValue} onToggle={toggleEditScope} />
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setEditScopeKey(null)}
+                  className="flex-1 px-4 py-2.5 text-xs font-bold rounded-xl border border-bento-border text-bento-text-secondary hover:text-bento-text-primary hover:bg-bento-surface-lighter transition-all duration-150"
+                >
+                  {t.cancel}
+                </button>
+                <button
+                  type="submit"
+                  disabled={editScopeSaving || editScopeValue.length === 0}
+                  className="flex-1 px-4 py-2.5 text-xs font-bold rounded-xl bg-bento-accent hover:bg-bento-accent/90 text-white shadow-xs disabled:opacity-50 transition-all duration-150"
+                >
+                  {editScopeSaving ? "Menyimpan..." : t.save}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

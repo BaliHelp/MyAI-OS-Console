@@ -146,6 +146,19 @@ export default function Dashboard({ adminEmail }: DashboardProps) {
     await fetchAllData(true);
   };
 
+  const handleUpdateKeyScope = async (keyId: string, scope: string[]) => {
+    const res = await fetch(`/api/keys/${keyId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider_scope: scope }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to update key scope");
+    }
+    await fetchAllData(true);
+  };
+
   const handleRenameApp = async (appId: string, name: string) => {
     const res = await fetch(`/api/apps/${appId}`, {
       method: "PATCH",
@@ -244,6 +257,7 @@ export default function Dashboard({ adminEmail }: DashboardProps) {
                 onCreateApp={handleCreateApp}
                 onGenerateKey={handleGenerateKey}
                 onRevokeKey={handleRevokeKey}
+                onUpdateKeyScope={handleUpdateKeyScope}
                 onDeleteApp={handleDeleteApp}
                 onRenameApp={handleRenameApp}
               />
